@@ -7,6 +7,14 @@ chronological order.
 Changes
 -------
 
+Version 1.2.1.0 (compiler 1.2.1.0, engine 1.2.0.2):
+- Compiler:
+  - Added support for binary integer constants (e.g., 0xb10101).
+  - Added support for using underscores (_) as separators within numeric
+    constants, as in Python (e.g., 0b1001_0101).
+- Application specification generator:
+  - Permitted the use of a + prefix on numeric constants.
+
 Version 1.2.0.3 (compiler 1.2.0.2, engine 1.2.0.2):
 - Fixed issues that caused compilation to fail with Windows Visual Studio.
 
