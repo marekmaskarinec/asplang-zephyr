@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cctype>
 #include <map>
+#include <algorithm>
 #include <limits>
 #include <cstdlib>
 #include <cerrno>
@@ -97,13 +98,21 @@ Token *Lexer::ProcessNumber()
         Null,
         Zero,
         Decimal,
+        DecimalSeparator,
+        IncompleteBinary,
+        Binary,
+        BinarySeparator,
         IncompleteHexadecimal,
         Hexadecimal,
+        HexadecimalSeparator,
         IncompleteSimpleFloat,
+        WholeFloat,
         SimpleFloat,
+        SimpleFloatSeparator,
         IncompleteExponential,
         IncompleteSignedExponential,
         Exponential,
+        ExponentialSeparator,
         Invalid,
     } state = State::Null;
     string lex;
@@ -128,6 +137,8 @@ Token *Lexer::ProcessNumber()
             case State::Zero:
                 if (tolower(c) == 'x')
                     state = State::IncompleteHexadecimal;
+                else if (tolower(c) == 'b')
+                    state = State::IncompleteBinary;
                 else if (c == '.')
                 {
                     if (Peek(1) == '.')
@@ -151,29 +162,42 @@ Token *Lexer::ProcessNumber()
                     if (Peek(1) == '.')
                         end = true;
                     else
-                        state = State::SimpleFloat;
+                        state = State::WholeFloat;
                 }
                 else if (tolower(c) == 'e')
                     state = State::IncompleteExponential;
                 else if (isalpha(c))
                     state = State::Invalid;
+                else if (c == '_')
+                    state = State::DecimalSeparator;
                 else if (!isdigit(c))
                     end = true;
                 break;
 
-            case State::IncompleteHexadecimal:
-                if (isxdigit(c))
-                    state = State::Hexadecimal;
+            case State::DecimalSeparator:
+                if (isdigit(c))
+                    state = State::Decimal;
                 else
                     state = State::Invalid;
                 break;
 
-            case State::Hexadecimal:
-                if (!isxdigit(c))
+            case State::IncompleteBinary:
+                if (c == '0' || c == '1')
+                    state = State::Binary;
+                else if (c == '_')
+                    state = State::BinarySeparator;
+                else
+                    state = State::Invalid;
+                break;
+
+            case State::Binary:
+                if (c != '0' && c != '1')
                 {
-                    if (isalpha(c))
+                    if (isalpha(c) || isdigit(c))
                         state = State::Invalid;
-                    if (c == '.')
+                    else if (c == '_')
+                        state = State::BinarySeparator;
+                    else if (c == '.')
                     {
                         if (Peek(1) == '.')
                             end = true;
@@ -185,6 +209,48 @@ Token *Lexer::ProcessNumber()
                 }
                 break;
 
+            case State::BinarySeparator:
+                if (isxdigit(c))
+                    state = State::Binary;
+                else
+                    state = State::Invalid;
+                break;
+
+            case State::IncompleteHexadecimal:
+                if (isxdigit(c))
+                    state = State::Hexadecimal;
+                else if (c == '_')
+                    state = State::HexadecimalSeparator;
+                else
+                    state = State::Invalid;
+                break;
+
+            case State::Hexadecimal:
+                if (!isxdigit(c))
+                {
+                    if (isalpha(c))
+                        state = State::Invalid;
+                    else if (c == '_')
+                        state = State::HexadecimalSeparator;
+                    else if (c == '.')
+                    {
+                        if (Peek(1) == '.')
+                            end = true;
+                        else
+                            state = State::Invalid;
+                    }
+                    else
+                        end = true;
+                }
+                break;
+
+            case State::HexadecimalSeparator:
+                if (isxdigit(c))
+                    state = State::Hexadecimal;
+                else
+                    state = State::Invalid;
+                break;
+
             case State::IncompleteSimpleFloat:
                 if (isdigit(c))
                     state = State::SimpleFloat;
@@ -192,11 +258,19 @@ Token *Lexer::ProcessNumber()
                     state = State::Invalid;
                 break;
 
+            case State::WholeFloat:
             case State::SimpleFloat:
                 if (tolower(c) == 'e')
                     state = State::IncompleteExponential;
                 else if (isalpha(c))
                     state = State::Invalid;
+                else if (c == '_')
+                {
+                    if (state == State::SimpleFloat)
+                        state = State::SimpleFloatSeparator;
+                    else
+                        state = State::Invalid;
+                }
                 else if (c == '.')
                 {
                     if (Peek(1) == '.')
@@ -204,8 +278,17 @@ Token *Lexer::ProcessNumber()
                     else
                         state = State::Invalid;
                 }
-                else if (!isdigit(c))
+                else if (isdigit(c))
+                    state = State::SimpleFloat;
+                else
                     end = true;
+                break;
+
+            case State::SimpleFloatSeparator:
+                if (isdigit(c))
+                    state = State::SimpleFloat;
+                else
+                    state = State::Invalid;
                 break;
 
             case State::IncompleteExponential:
@@ -227,7 +310,9 @@ Token *Lexer::ProcessNumber()
             case State::Exponential:
                 if (isalpha(c))
                     state = State::Invalid;
-                if (c == '.')
+                else if (c == '_')
+                    state = State::ExponentialSeparator;
+                else if (c == '.')
                 {
                     if (Peek(1) == '.')
                         end = true;
@@ -237,16 +322,35 @@ Token *Lexer::ProcessNumber()
                 else if (!isdigit(c))
                     end = true;
                 break;
+
+            case State::ExponentialSeparator:
+                if (isdigit(c))
+                    state = State::Exponential;
+                else
+                    state = State::Invalid;
+                break;
         }
 
-        if (end || state == State::Invalid)
+        if (end)
             break;
 
-        lex += static_cast<char>(c);
+        if (c != '\n')
+            lex += static_cast<char>(c);
+
+        if (state == State::Invalid)
+            break;
+
         Get();
     }
 
-    auto s = lex.c_str();
+    // Remove any separators.
+    auto cleanLex = lex;
+    if (state != State::Invalid)
+        cleanLex.erase
+            (remove(cleanLex.begin(), cleanLex.end(), '_'),
+             cleanLex.end());
+
+    const auto s = cleanLex.c_str();
     switch (state)
     {
         case State::Zero:
@@ -255,10 +359,10 @@ Token *Lexer::ProcessNumber()
             static const uint32_t max =
                 static_cast<uint32_t>(INT32_MAX) + 1U;
             errno = 0;
-            auto lValue = strtoul(s, nullptr, 10);
-            auto uValue = static_cast<uint32_t>(lValue);
+            auto ulValue = strtoul(s, nullptr, 10);
+            auto uValue = static_cast<uint32_t>(ulValue);
             return
-                errno != 0 || lValue > max ?
+                errno != 0 || ulValue > max ?
                 new Token
                     (sourceLocation, -1, lex,
                      "Decimal constant out of range") :
@@ -268,16 +372,20 @@ Token *Lexer::ProcessNumber()
                      uValue == max, lex);
         }
 
+        case State::Binary:
         case State::Hexadecimal:
         {
             errno = 0;
-            auto lValue = strtoul(s, nullptr, 0x10);
-            auto uValue = static_cast<uint32_t>(lValue);
+            auto ulValue = strtoul
+                (s + 2, nullptr, state == State::Binary ? 2 : 0x10);
+            auto uValue = static_cast<uint32_t>(ulValue);
             return
-                errno != 0 || lValue > UINT32_MAX ?
+                errno != 0 || ulValue > UINT32_MAX ?
                 new Token
                     (sourceLocation, -1, lex,
-                     "Hexadecimal constant out of range") :
+                     string
+                        (state == State::Binary ? "Binary" : "Hexadecimal") +
+                     " constant out of range") :
                 new Token
                     (sourceLocation,
                      *reinterpret_cast<int32_t *>(&uValue),
@@ -285,6 +393,7 @@ Token *Lexer::ProcessNumber()
         }
 
         case State::SimpleFloat:
+        case State::WholeFloat:
         case State::Exponential:
             return new Token(sourceLocation, strtod(s, nullptr), lex);
     }
