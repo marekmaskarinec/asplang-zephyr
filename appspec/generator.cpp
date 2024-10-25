@@ -329,9 +329,22 @@ DEFINE_ACTION
 DEFINE_ACTION
     (MakeLiteral, Literal *, Token *, token)
 {
-    auto result = new Literal(*token);
-    delete token;
-    return result;
+    try
+    {
+        auto result = new Literal(*token);
+        delete token;
+        return result;
+    }
+    catch (const pair<SourceElement, string> &e)
+    {
+        ReportError(e.second, e.first);
+    }
+    catch (const string &e)
+    {
+        ReportError(e);
+    }
+
+    return nullptr;
 }
 
 DEFINE_UTIL(FreeNonTerminal, void, NonTerminal *, nt)
