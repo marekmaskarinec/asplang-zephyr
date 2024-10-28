@@ -193,7 +193,7 @@ Token *Lexer::ProcessNumber()
             case State::Binary:
                 if (c != '0' && c != '1')
                 {
-                    if (isalpha(c) || isdigit(c))
+                    if (isalnum(c))
                         state = State::Invalid;
                     else if (c == '_')
                         state = State::BinarySeparator;
