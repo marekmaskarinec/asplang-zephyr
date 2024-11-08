@@ -7,6 +7,7 @@
 #include "standalone.h"
 #include "context.h"
 #include <ctime>
+#include <csignal>
 #include <iostream>
 #include <iomanip>
 #include <set>
@@ -27,6 +28,8 @@ static const size_t DEFAULT_DATA_ENTRY_COUNT = 2048;
 
 static AspRunResult LoadCodePage
     (void *, uint32_t offset, size_t *size, void *codePage);
+static void HandleInterrupt(int);
+static bool Interrupted = false;
 
 static void Usage()
 {
@@ -542,6 +545,9 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    // Prepare for the run for the potential of being interrupted by the user.
+    signal(SIGINT, HandleInterrupt);
+
     // Run the code.
     context.sleeping = false;
     AspRunResult runResult = AspRunResult_OK;
@@ -553,7 +559,7 @@ int main(int argc, char **argv)
         fprintf(reportFile, "Executing %u instructions...\n", stepCountLimit);
     #endif
     for (;
-         runResult == AspRunResult_OK
+         !Interrupted && runResult == AspRunResult_OK
          #ifdef ASP_DEBUG
          && (stepCountLimit == UINT_MAX || stepCount < stepCountLimit)
          #endif
@@ -601,10 +607,13 @@ int main(int argc, char **argv)
     if (runResult != AspRunResult_Complete)
     #endif
     {
-        fprintf
-            (statusFile,
-             "Run error 0x%02X: %s\n",
-             runResult, AspRunResultToString(static_cast<int>(runResult)));
+        if (Interrupted)
+            fputs("Run was INTERRUPTED!\n", reportFile);
+        if (runResult != AspRunResult_OK)
+            fprintf
+                (statusFile,
+                 "Run error 0x%02X: %s\n",
+                 runResult, AspRunResultToString(static_cast<int>(runResult)));
 
         // Report the program counter.
         auto programCounter = AspProgramCounter(&engine);
@@ -670,4 +679,9 @@ static AspRunResult LoadCodePage
     *size = readCount;
 
     return AspRunResult_OK;
+}
+
+static void HandleInterrupt(int)
+{
+    Interrupted = true;
 }
