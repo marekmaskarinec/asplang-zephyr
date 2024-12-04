@@ -76,7 +76,8 @@ ASP_LIB_API AspRunResult AspLib_bool
  * and NaNs) raise an error condition if check is true. Otherwise, out of range
  * floats (including infinities) are converted to either INT32_MIN or INT32_MAX
  * according to the sign, and NaNs are converted to zero.
- * Strings are treated in the normal C way, as per strtol.
+ * Strings are treated in the normal C way, as per strtol. Malformed strings
+ * raise an error condition if check is true. Otherwise, None is returned.
  * If base is given, x must be a string.
  * For string conversions, the default base is 10.
  */
@@ -95,12 +96,14 @@ ASP_LIB_API AspRunResult AspLib_int
     if (!AspIsNone(base) && !AspIsString(x))
         return AspRunResult_UnexpectedType;
 
+    bool checkValue = AspIsTrue(engine, check);
+
     int32_t intValue;
     if (AspIsNumeric(x))
     {
         bool valid = AspIntegerValue(x, &intValue);
-        if (AspIsTrue(engine, check) && !valid)
-            return AspRunResult_ValueOutOfRange;
+        if (!valid)
+            return checkValue ? AspRunResult_ValueOutOfRange : AspRunResult_OK;
     }
     else if (AspIsString(x))
     {
@@ -119,7 +122,7 @@ ASP_LIB_API AspRunResult AspLib_int
         size_t size = sizeof buffer;
         AspRunResult extractResult = ExtractWord(engine, x, buffer, &size);
         if (extractResult != AspRunResult_OK)
-            return extractResult;
+            return checkValue ? extractResult : AspRunResult_OK;
 
         /* Convert the word to an integer value. */
         char *endp;
@@ -127,7 +130,7 @@ ASP_LIB_API AspRunResult AspLib_int
         long longValue = strtol(buffer, &endp, (int)baseValue);
         if (*endp != '\0' || errno != 0 ||
             longValue < INT32_MIN || longValue > INT32_MAX)
-            return AspRunResult_ValueOutOfRange;
+            return checkValue ? AspRunResult_ValueOutOfRange : AspRunResult_OK;
         intValue = (int32_t)longValue;
     }
     else
@@ -140,6 +143,8 @@ ASP_LIB_API AspRunResult AspLib_int
 
 /* float(x)
  * Convert a number or string to a float.
+ * Strings are treated in the normal C way, as per strtod. If the string is
+ * malformed, None is returned.
  */
 ASP_LIB_API AspRunResult AspLib_float
     (AspEngine *engine,
@@ -165,14 +170,14 @@ ASP_LIB_API AspRunResult AspLib_float
         size_t size = sizeof buffer;
         AspRunResult extractResult = ExtractWord(engine, x, buffer, &size);
         if (extractResult != AspRunResult_OK)
-            return extractResult;
+            return AspRunResult_OK;
 
         /* Convert the word to a floating-point value. */
         char *endp;
         errno = 0;
         floatValue = strtod(buffer, &endp);
         if (*endp != '\0' || errno != 0)
-            return AspRunResult_ValueOutOfRange;
+            return AspRunResult_OK;
     }
     else
         return AspRunResult_UnexpectedType;
