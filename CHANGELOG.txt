@@ -7,6 +7,21 @@ chronological order.
 Changes
 -------
 
+Version 1.2.2.0 (compiler 1.2.1.0, engine 1.2.1.0):
+- Engine.
+  - Changed the default value of the script-callable int function's check
+    parameter to False, and changed the function's behaviour in this case to
+    return None for out-of-range floating-point values and malformed strings,
+    allowing scripts to test for invalid input.
+    - NOTE: The check parameter should now be considered obsolescent and may be
+      removed in a future version.
+  - Changed the behaviour of the script-callable float function to return None
+    for malformed string input instead of raising an error and ending the
+    script.
+- Standalone application:
+  - Added handling of user interrupts so that final reports are still generated
+    when a user interrupts the run.
+
 Version 1.2.1.0 (compiler 1.2.1.0, engine 1.2.0.2):
 - Compiler:
   - Added support for binary integer constants (e.g., 0xb10101).
