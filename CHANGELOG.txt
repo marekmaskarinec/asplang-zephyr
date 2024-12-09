@@ -7,6 +7,16 @@ chronological order.
 Changes
 -------
 
+Version 1.2.2.1 (compiler 1.2.1.1, engine 1.2.1.0):
+- Compiler:
+  - Renamed the -s option (silent) to -q (quiet) to be compatible with the aspg
+    command. Note that the -s option is still accepted.
+- Application specification generator:
+  - Added command line options -c and -s to specify the name or directories of
+    output files.
+  - Added some reporting. It may be squelched via the -q command line option.
+  - Added -v option to print version information and exit.
+
 Version 1.2.2.0 (compiler 1.2.1.0, engine 1.2.1.0):
 - Engine.
   - Changed the default value of the script-callable int function's check

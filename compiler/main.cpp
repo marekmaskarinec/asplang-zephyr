@@ -90,11 +90,11 @@ static void Usage()
         << "            file name. If FILE ends with .aspe, its base name is"
         << " used instead.\n"
         << "            If FILE ends with " << FILE_NAME_SEPARATORS[0]
-        << ", SCRIPT.* will be written in the directory\n"
+        << ", SCRIPT.* will be written into the directory\n"
         << "            given by FILE. In this case, the directory must"
         << " already exist.\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "s          Silent. Don't output usual compiler information.\n"
+        << "q          Quiet. Don't output usual compiler information.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "v          Print version information and exit.\n";
 }
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 static int main1(int argc, char **argv)
 {
     // Process command line options.
-    bool silent = false, reportVersion = false;
+    bool quiet = false, reportVersion = false;
     string outputBaseName;
     for (; argc >= 2; argc--, argv++)
     {
@@ -146,8 +146,8 @@ static int main1(int argc, char **argv)
             outputBaseName = (++argv)[1];
             argc--;
         }
-        else if (option == "s")
-            silent = true;
+        else if (option == "q" || option == "s")
+            quiet = true;
         else if (option == "v")
             reportVersion = true;
         else
@@ -170,7 +170,7 @@ static int main1(int argc, char **argv)
         return 0;
     }
 
-    // Obtain input file names.
+    // Obtain input file name(s).
     if (argc < 2 || argc > 3)
     {
         Usage();
@@ -237,8 +237,8 @@ static int main1(int argc, char **argv)
         (FILE_NAME_SEPARATORS);
     size_t baseNamePos = mainModuleDirectorySeparatorPos == string::npos ?
         0 : mainModuleDirectorySeparatorPos + 1;
-    string mainModuleDirectoryName = mainModuleFileName.substr(0, baseNamePos);
-    string mainModuleBaseFileName = mainModuleFileName.substr(baseNamePos);
+    auto mainModuleDirectoryName = mainModuleFileName.substr(0, baseNamePos);
+    auto mainModuleBaseFileName = mainModuleFileName.substr(baseNamePos);
 
     // If the application specification is not specified, check for the
     // existence of a fixed-named file in the same directory as the source
@@ -284,7 +284,7 @@ static int main1(int argc, char **argv)
             << ": " << strerror(errno) << endl;
         return 2;
     }
-    if (!silent)
+    if (!quiet)
         cout << "Using " << specFileName << endl;
 
     // Determine the base name of all output files.
@@ -523,8 +523,8 @@ static int main1(int argc, char **argv)
     if (!listingStream || !sourceInfoStream)
         return 6;
 
-    // Write statistics.
-    if (executableStream && !silent)
+    // Report statistics.
+    if (executableStream && !quiet)
     {
         cout
             << executableFileName << ": "

@@ -18,6 +18,15 @@
 #include <cstdlib>
 #include <cerrno>
 
+#if !defined ASP_GENERATOR_VERSION_MAJOR || \
+    !defined ASP_GENERATOR_VERSION_MINOR || \
+    !defined ASP_GENERATOR_VERSION_PATCH || \
+    !defined ASP_GENERATOR_VERSION_TWEAK
+#error ASP_GENERATOR_VERSION_* macros undefined
+#endif
+#ifndef COMMAND_OPTION_PREFIXES
+#error COMMAND_OPTION_PREFIXES macro undefined
+#endif
 #ifndef FILE_NAME_SEPARATORS
 #error FILE_NAME_SEPARATORS macro undefined
 #endif
@@ -42,6 +51,66 @@ struct ActiveSourceFile
     void *parser;
 };
 
+static void Usage()
+{
+    cerr
+        << "Usage:      aspg [OPTION]... ["
+        << COMMAND_OPTION_PREFIXES[0] << COMMAND_OPTION_PREFIXES[0]
+        << "] SOURCE\n"
+        << "\n"
+        << "Generate binary application specification file and C code"
+        << " from the source\n"
+        << "file (*.asps) given as SOURCE.\n"
+        << "\n"
+        << "Use " << COMMAND_OPTION_PREFIXES[0] << COMMAND_OPTION_PREFIXES[0]
+        << " before the SOURCE argument if it starts with an option prefix.\n"
+        << "\n"
+        << "Options";
+    if (strlen(COMMAND_OPTION_PREFIXES) > 1)
+    {
+        cerr << " (may be prefixed by";
+        for (unsigned i = 1; i < strlen(COMMAND_OPTION_PREFIXES); i++)
+        {
+            if (i != 1)
+            {
+                if (i == strlen(COMMAND_OPTION_PREFIXES) - 1)
+                    cerr << " or";
+                else
+                    cerr << ',';
+            }
+            cerr << ' ' << COMMAND_OPTION_PREFIXES[i];
+        }
+        cerr << " instead of " << COMMAND_OPTION_PREFIXES[0] << ')';
+    }
+    cerr
+        << ":\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "c CODE     Write generated C code files to CODE.h and CODE.c"
+        << " instead of basing\n"
+        << "            file names on the SOURCE file name. If CODE"
+        << " ends with " << FILE_NAME_SEPARATORS[0] << ", the output\n"
+        << "            file names will be based on SOURCE and the files"
+        << " will be written\n"
+        << "            into the directory given by CODE. In this"
+        << " case, the directory must\n"
+        << "            already exist.\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "q          Quiet. Don't output usual generator information.\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "s SPEC     Write the binary spec file to SPEC.aspec"
+        << " instead of basing the file\n"
+        << "            name on the SOURCE file name. If SPEC ends"
+        << " with .aspec, the name\n"
+        << "            will be used as is. If SPEC ends with "
+        << FILE_NAME_SEPARATORS[0] << ", the output file name will\n"
+        << "            be based on SOURCE and the files will be"
+        << " written into the directory\n"
+        << "            given by SPEC. In this case, the"
+        << " directory must already exist.\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "v          Print version information and exit.\n";
+}
+
 static int main1(int argc, char **argv);
 int main(int argc, char **argv)
 {
@@ -61,10 +130,66 @@ int main(int argc, char **argv)
 }
 static int main1(int argc, char **argv)
 {
+    // Process command line options.
+    bool quiet = false, reportVersion = false;
+    string outputCodeBaseName, outputSpecBaseName;
+    for (; argc >= 2; argc--, argv++)
+    {
+        string arg1 = argv[1];
+        string prefix = arg1.substr(0, 1);
+        auto prefixIndex =
+            string(COMMAND_OPTION_PREFIXES).find_first_of(prefix);
+        if (prefixIndex == string::npos)
+            break;
+        string option = arg1.substr(1);
+        if (option == string(1, COMMAND_OPTION_PREFIXES[prefixIndex]))
+        {
+            argc--; argv++;
+            break;
+        }
+
+        if (option == "?" || option == "h")
+        {
+            Usage();
+            return 0;
+        }
+        else if (option == "c")
+        {
+            outputCodeBaseName = (++argv)[1];
+            argc--;
+        }
+        else if (option == "q")
+            quiet = true;
+        else if (option == "s")
+        {
+            outputSpecBaseName = (++argv)[1];
+            argc--;
+        }
+        else if (option == "v")
+            reportVersion = true;
+        else
+        {
+            cerr << "Invalid option: "  << arg1 << endl;
+            return 1;
+        }
+    }
+
+    // Report version information and exit if requested.
+    if (reportVersion)
+    {
+        cout
+            << ASP_GENERATOR_VERSION_MAJOR << '.'
+            << ASP_GENERATOR_VERSION_MINOR << '.'
+            << ASP_GENERATOR_VERSION_PATCH << '.'
+            << ASP_GENERATOR_VERSION_TWEAK
+            << endl;
+        return 0;
+    }
+
     // Obtain spec source file name.
     if (argc != 2)
     {
-        cerr << "Specify file" << endl;
+        Usage();
         return 1;
     }
     const string sourceFileName(argv[1]);
@@ -90,7 +215,8 @@ static int main1(int argc, char **argv)
     if (strchr(FILE_NAME_SEPARATORS, '/') == nullptr)
         fileNameSeparators += '/';
 
-    // Split the source file name into its constituent parts.
+    // Determine the base of the source file name, excluding any directory
+    // path.
     auto sourceDirectorySeparatorPos = sourceFileName.find_last_of
         (fileNameSeparators);
     size_t baseNamePos = sourceDirectorySeparatorPos == string::npos ?
@@ -103,11 +229,23 @@ static int main1(int argc, char **argv)
         return 1;
     }
 
+    // Determine the base name of the output spec file.
+    string specBaseName =
+        outputSpecBaseName.empty() ? baseName :
+        strchr(FILE_NAME_SEPARATORS, outputSpecBaseName.back()) == nullptr ?
+        outputSpecBaseName : outputSpecBaseName + baseName;
+
+    // Determine the base name of output code files.
+    string codeBaseName =
+        outputCodeBaseName.empty() ? baseName :
+        strchr(FILE_NAME_SEPARATORS, outputCodeBaseName.back()) == nullptr ?
+        outputCodeBaseName : outputCodeBaseName + baseName;
+
     // Determine output file names.
     static string specSuffix = ".aspec", headerSuffix = ".h", codeSuffix = ".c";
-    string specFileName = baseName + specSuffix;
-    string headerFileName = baseName + headerSuffix;
-    string codeFileName = baseName + codeSuffix;
+    string specFileName = specBaseName + specSuffix;
+    string headerFileName = codeBaseName + headerSuffix;
+    string codeFileName = codeBaseName + codeSuffix;
 
     // Open input source file.
     auto sourceStream = unique_ptr<istream>(new ifstream(sourceFileName));
@@ -351,7 +489,13 @@ static int main1(int argc, char **argv)
     }
 
     // Write all output files.
+    if (!quiet)
+        cout << "Writing spec to " << specFileName << endl;
     generator.WriteCompilerSpec(specStream);
+    if (!quiet)
+        cout
+            << "Writing code to " << headerFileName << " and " << codeFileName
+            << endl;
     generator.WriteApplicationHeader(headerStream);
     generator.WriteApplicationCode(codeStream);
 

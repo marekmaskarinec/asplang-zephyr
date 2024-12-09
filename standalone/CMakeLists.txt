@@ -38,7 +38,7 @@ add_custom_command(
     COMMAND
         ${CMAKE_COMMAND} -E env
         "ASP_SPEC_INCLUDE=${PATH_NAME_SEPARATOR}${aspe_SOURCE_DIR}"
-        "$<TARGET_FILE:aspg>"
+        "$<TARGET_FILE:aspg>" "-q"
         "${PROJECT_SOURCE_DIR}/standalone.asps"
     )
 
