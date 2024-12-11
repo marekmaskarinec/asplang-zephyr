@@ -138,7 +138,7 @@ class Generator
         // Code generation data.
         SourceLocation currentSourceLocation;
         SymbolTable &symbolTable;
-        std::string baseFileName;
+        std::string baseFileName, baseName;
 
         // Source file data.
         bool newFile = true, isLibrary = false;

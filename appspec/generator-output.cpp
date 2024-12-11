@@ -100,13 +100,13 @@ void Generator::WriteApplicationHeader(ostream &os) const
 {
     os
         << "/*** AUTO-GENERATED; DO NOT EDIT ***/\n\n"
-           "#ifndef ASP_APP_" << baseFileName << "_DEF_H\n"
-           "#define ASP_APP_" << baseFileName << "_DEF_H\n\n"
+           "#ifndef ASP_APP_" << baseName << "_DEF_H\n"
+           "#define ASP_APP_" << baseName << "_DEF_H\n\n"
            "#include <asp.h>\n\n"
            "#ifdef __cplusplus\n"
            "extern \"C\" {\n"
            "#endif\n\n"
-           "extern AspAppSpec AspAppSpec_" << baseFileName << ";\n\n";
+           "extern AspAppSpec AspAppSpec_" << baseName << ";\n\n";
 
     // Write symbol macro definitions.
     for (auto iter = symbolTable.Begin();
@@ -116,7 +116,7 @@ void Generator::WriteApplicationHeader(ostream &os) const
         const auto &symbol = iter->second;
 
         os
-            << "#define ASP_APP_" << baseFileName << "_SYM_" << name
+            << "#define ASP_APP_" << baseName << "_SYM_" << name
             << ' ' << symbol << '\n';
     }
 
@@ -181,7 +181,7 @@ void Generator::WriteApplicationCode(ostream &os) const
 
     // Write the dispatch function.
     os
-        << "\nstatic AspRunResult AspDispatch_" << baseFileName
+        << "\nstatic AspRunResult AspDispatch_" << baseName
         << "\n    (AspEngine *engine, int32_t symbol, AspDataEntry *ns,\n"
            "     AspDataEntry **returnValue)\n"
            "{\n"
@@ -263,7 +263,7 @@ void Generator::WriteApplicationCode(ostream &os) const
 
     // Write the application specification structure.
     os
-        << "\nAspAppSpec AspAppSpec_" << baseFileName << " =\n"
+        << "\nAspAppSpec AspAppSpec_" << baseName << " =\n"
            "{";
     unsigned specByteCount = 0;
     for (const auto &definitionEntry: definitions)
@@ -334,7 +334,7 @@ void Generator::WriteApplicationCode(ostream &os) const
             << ",\n    " << specByteCount
             << hex << uppercase << setprecision(4) << setfill('0')
             << ", 0x" << setw(4) << CheckValue() << dec
-            << ", AspDispatch_" << baseFileName << "\n"
+            << ", AspDispatch_" << baseName << "\n"
                "};\n";
 
         os.flags(oldFlags);

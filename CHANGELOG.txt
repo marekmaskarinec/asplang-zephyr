@@ -12,6 +12,10 @@ Version 1.2.2.1 (compiler 1.2.1.1, engine 1.2.1.0):
   - Renamed the -s option (silent) to -q (quiet) to be compatible with the aspg
     command. Note that the -s option is still accepted.
 - Application specification generator:
+  - Added support for application specification file names that don't adhere to
+    the naming rules for C variable names. Generated names based on the file
+    name replace invalid characters with an underscore. To include such files,
+    the name must be given as a string.
   - Added command line options -c and -s to specify the name or directories of
     output files.
   - Added some reporting. It may be squelched via the -q command line option.

@@ -10,6 +10,7 @@
 #include "grammar.hpp"
 #include <iostream>
 #include <sstream>
+#include <cctype>
 
 using namespace std;
 
@@ -19,8 +20,18 @@ Generator::Generator
      const string &baseFileName) :
     errorStream(errorStream),
     symbolTable(symbolTable),
-    baseFileName(baseFileName)
+    baseFileName(baseFileName),
+    baseName(baseFileName)
 {
+    // Deal with invalid variable name characters in the file name.
+    for (string::iterator si = baseName.begin();
+         si != baseName.end();
+         si++)
+    {
+        auto c = *si;
+        if (!isalnum(c) && c != '_')
+            *si = '_';
+    }
 }
 
 Generator::~Generator()

@@ -74,6 +74,11 @@ statement(result) ::= INCLUDE NAME(includeName) STATEMENT_END.
     result = ACTION(IncludeHeader, includeName);
 }
 
+statement(result) ::= INCLUDE STRING(includeString) STATEMENT_END.
+{
+    result = ACTION(IncludeHeader, includeString);
+}
+
 statement(result) ::=
     NAME(nameToken) ASSIGN literal(value) STATEMENT_END.
 {
