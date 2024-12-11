@@ -94,6 +94,8 @@ static void Usage()
         << "            given by FILE. In this case, the directory must"
         << " already exist.\n"
         << COMMAND_OPTION_PREFIXES[0]
+        << "h          Print usage information and exit.\n"
+        << COMMAND_OPTION_PREFIXES[0]
         << "q          Quiet. Don't output usual compiler information.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "v          Print version information and exit.\n";

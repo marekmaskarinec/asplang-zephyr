@@ -95,6 +95,8 @@ static void Usage()
         << " case, the directory must\n"
         << "            already exist.\n"
         << COMMAND_OPTION_PREFIXES[0]
+        << "h          Print usage information and exit.\n"
+        << COMMAND_OPTION_PREFIXES[0]
         << "q          Quiet. Don't output usual generator information.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "s SPEC     Write the binary spec file to SPEC.aspec"
@@ -178,6 +180,7 @@ static int main1(int argc, char **argv)
     if (reportVersion)
     {
         cout
+            << "Asp generator version "
             << ASP_GENERATOR_VERSION_MAJOR << '.'
             << ASP_GENERATOR_VERSION_MINOR << '.'
             << ASP_GENERATOR_VERSION_PATCH << '.'

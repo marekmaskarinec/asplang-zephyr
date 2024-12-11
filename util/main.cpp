@@ -12,6 +12,12 @@
 
 using namespace std;
 
+#if !defined ASP_INFO_VERSION_MAJOR || \
+    !defined ASP_INFO_VERSION_MINOR || \
+    !defined ASP_INFO_VERSION_PATCH || \
+    !defined ASP_INFO_VERSION_TWEAK
+#error ASP_INFO_VERSION_* macros undefined
+#endif
 #ifndef COMMAND_OPTION_PREFIXES
 #error COMMAND_OPTION_PREFIXES macro undefined
 #endif
@@ -52,11 +58,15 @@ static void Usage()
         << COMMAND_OPTION_PREFIXES[0]
         << "e code     Translate the run result to descriptive text.\n"
         << COMMAND_OPTION_PREFIXES[0]
+        << "h          Print usage information and exit.\n"
+        << COMMAND_OPTION_PREFIXES[0]
         << "l          List all source files.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "p pc       Translate program counter source location.\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "s name     Translate symbol number to name.\n";
+        << "s name     Translate symbol number to name.\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "v          Print version information and exit.\n";
 }
 
 int main(int argc, char **argv)
@@ -68,6 +78,7 @@ int main(int argc, char **argv)
     }
 
     // Locate the source info file name argument.
+    bool reportVersion = false;
     int argIndex = 1;
     for (; argIndex < argc; argIndex++)
     {
@@ -84,8 +95,33 @@ int main(int argc, char **argv)
         }
 
         string option = arg.substr(1);
+        if (option == "?" || option == "h")
+        {
+            Usage();
+            return 0;
+        }
         if (option == "e" || option == "a" || option == "p" || option == "s")
             argIndex++;
+        else if (option == "v")
+            reportVersion = true;
+        else
+        {
+            cerr << "Invalid option: " << arg << endl;
+            return 1;
+        }
+    }
+
+    // Report version information and exit if requested.
+    if (reportVersion)
+    {
+        cout
+            << "Asp information utility version "
+            << ASP_INFO_VERSION_MAJOR << '.'
+            << ASP_INFO_VERSION_MINOR << '.'
+            << ASP_INFO_VERSION_PATCH << '.'
+            << ASP_INFO_VERSION_TWEAK
+            << endl;
+        return 0;
     }
 
     // Open the source info file, if specified.

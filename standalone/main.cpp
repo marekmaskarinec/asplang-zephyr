@@ -18,6 +18,12 @@
 #include <cerrno>
 #include <climits>
 
+#if !defined ASP_STANDALONE_VERSION_MAJOR || \
+    !defined ASP_STANDALONE_VERSION_MINOR || \
+    !defined ASP_STANDALONE_VERSION_PATCH || \
+    !defined ASP_STANDALONE_VERSION_TWEAK
+#error ASP_STANDALONE_VERSION_* macros undefined
+#endif
 #ifndef COMMAND_OPTION_PREFIXES
 #error COMMAND_OPTION_PREFIXES macro undefined
 #endif
@@ -61,10 +67,6 @@ static void Usage()
     cerr
         << ":\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "h          Print usage information.\n"
-        << COMMAND_OPTION_PREFIXES[0]
-        << "v          Verbose. Output version and statistical information.\n"
-        << COMMAND_OPTION_PREFIXES[0]
         << "c n        Code size, in bytes."
         << " The default behaviour is to determine the size\n"
         << "            from the SCRIPT file."
@@ -75,15 +77,19 @@ static void Usage()
         << AspDataEntrySize() << " bytes."
         << " Default is " << DEFAULT_DATA_ENTRY_COUNT << ".\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "p n        Code page size, in bytes. The default is 0, which"
-        << " disables paging\n"
-        << "            mode. The number of pages is this value divided by the"
-        << " code size.\n"
+        << "h          Print usage information and exit.\n"
         #ifdef ASP_DEBUG
         << COMMAND_OPTION_PREFIXES[0]
         << "n n        Number of instructions to execute before exiting."
         << " Useful for\n"
         << "            debugging. Available only in debug builds.\n"
+        #endif
+        << COMMAND_OPTION_PREFIXES[0]
+        << "p n        Code page size, in bytes. The default is 0, which"
+        << " disables paging\n"
+        << "            mode. The number of pages is this value divided by the"
+        << " code size.\n"
+        #ifdef ASP_DEBUG
         << COMMAND_OPTION_PREFIXES[0]
         << "t file     Trace output file."
         << " The default is standard output. Overrides a\n"
@@ -112,6 +118,8 @@ static void Usage()
         << "            " << COMMAND_OPTION_PREFIXES[0] << "u or "
         << COMMAND_OPTION_PREFIXES[0] << "U option.\n"
         #endif
+        << COMMAND_OPTION_PREFIXES[0]
+        << "v          Verbose. Output version and statistical information.\n"
         ;
 }
 
@@ -233,40 +241,8 @@ int main(int argc, char **argv)
         }
     }
 
-    // Obtain executable file name.
-    if (argc < 2)
-    {
-        cerr << "No program specified" << endl;
-        Usage();
-        return 1;
-    }
-
-    // Open the executable file.
-    string executableFileName = argv[1];
-    auto openExecutable = [](const char *fileName)
-    {
-        return fopen(fileName, "rb");
-    };
-    FILE *executableFile = openExecutable(executableFileName.c_str());
-    static const string executableSuffix = ".aspe";
-    if (executableFile == nullptr)
-    {
-        // Try appending the appropriate suffix if the specified file did not
-        // exist.
-        executableFileName += executableSuffix;
-        executableFile = openExecutable(executableFileName.c_str());
-    }
-    if (executableFile == nullptr)
-    {
-        cerr
-            << "Error opening " << executableFileName
-            << ": " << strerror(errno) << endl;
-        return 1;
-    }
-
     // Prepare to close files when done.
     set<FILE *> openedFiles;
-    openedFiles.insert(executableFile);
 
     // Open the trace and dump files.
     #ifdef ASP_DEBUG
@@ -309,6 +285,59 @@ int main(int argc, char **argv)
         }
     }
     #endif
+
+    // Report program version information.
+    FILE *reportFile;
+    #ifdef ASP_DEBUG
+    reportFile = traceFile;
+    #else
+    reportFile = stdout;
+    #endif
+    if (verbose)
+    {
+        fprintf
+            (reportFile, "Asp standalone application version %d.%d.%d.%d\n",
+             ASP_STANDALONE_VERSION_MAJOR,
+             ASP_STANDALONE_VERSION_MINOR,
+             ASP_STANDALONE_VERSION_PATCH,
+             ASP_STANDALONE_VERSION_TWEAK);
+    }
+
+    // Obtain executable file name.
+    if (argc < 2)
+    {
+        // Exit gracefully if verbose mode is specified.
+        if (verbose)
+            return 0;
+
+        cerr << "No program specified" << endl;
+        Usage();
+        return 1;
+    }
+
+    // Open the executable file.
+    string executableFileName = argv[1];
+    auto openExecutable = [](const char *fileName)
+    {
+        return fopen(fileName, "rb");
+    };
+    FILE *executableFile = openExecutable(executableFileName.c_str());
+    static const string executableSuffix = ".aspe";
+    if (executableFile == nullptr)
+    {
+        // Try appending the appropriate suffix if the specified file did not
+        // exist.
+        executableFileName += executableSuffix;
+        executableFile = openExecutable(executableFileName.c_str());
+    }
+    if (executableFile == nullptr)
+    {
+        cerr
+            << "Error opening " << executableFileName
+            << ": " << strerror(errno) << endl;
+        return 1;
+    }
+    openedFiles.insert(executableFile);
 
     // Determine byte size of data area.
     size_t dataEntrySize = AspDataEntrySize();
@@ -503,13 +532,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // Report version information.
-    FILE *reportFile;
-    #ifdef ASP_DEBUG
-    reportFile = traceFile;
-    #else
-    reportFile = stdout;
-    #endif
+    // Report engine and code version information.
     if (verbose)
     {
         uint8_t engineVersion[4], codeVersion[4];
