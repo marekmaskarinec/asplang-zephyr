@@ -74,7 +74,7 @@ int main(int argc, char **argv)
     if (argc < 2)
     {
         Usage();
-        return 0;
+        return 1;
     }
 
     // Locate the source info file name argument.
