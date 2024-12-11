@@ -16,12 +16,12 @@ Version 1.2.2.1 (compiler 1.2.1.1, engine 1.2.1.0):
     the naming rules for C variable names. Generated names based on the file
     name replace invalid characters with an underscore. To include such files,
     the name must be given as a string.
-  - Added command line options -c and -s to specify the name or directories of
+  - Added command line options -c and -s to specify the names or directories of
     output files.
   - Added some reporting. It may be squelched via the -q command line option.
 - General:
   - Added options to report version (-v) and usage (-h) to commands where it
-    was missing, and made the style common where it wasn't.
+    was missing, and made the style of the output common where it wasn't.
 
 Version 1.2.2.0 (compiler 1.2.1.0, engine 1.2.1.0):
 - Engine.
