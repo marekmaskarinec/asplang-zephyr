@@ -11,7 +11,8 @@
 #include <string.h>
 
 static int CompareFloats(double, double, AspCompareType, bool *nanDetected);
-static int CompareIterators(const AspDataEntry *, const AspDataEntry *);
+static int CompareIterators
+    (AspEngine *, const AspDataEntry *, const AspDataEntry *);
 
 AspRunResult AspCompare
     (AspEngine *engine,
@@ -87,7 +88,8 @@ AspRunResult AspCompare
                 {
                     /* Compare iterators of different types (forward and
                        reverse). They are only ever tested for equality. */
-                    comparison = CompareIterators(leftEntry, rightEntry);
+                    comparison = CompareIterators
+                        (engine, leftEntry, rightEntry);
                 }
                 else
                     comparison = 1;
@@ -376,7 +378,8 @@ AspRunResult AspCompare
                     case DataType_ReverseIterator:
                     {
                         /* Iterators are only ever tested for equality. */
-                        comparison = CompareIterators(leftEntry, rightEntry);
+                        comparison = CompareIterators
+                            (engine, leftEntry, rightEntry);
                         break;
                     }
 
@@ -615,14 +618,37 @@ static int CompareFloats
 }
 
 static int CompareIterators
-    (const AspDataEntry *leftEntry, const AspDataEntry *rightEntry)
+    (AspEngine *engine,
+     const AspDataEntry *leftEntry, const AspDataEntry *rightEntry)
 {
-    return
-        AspDataGetIteratorIterableIndex(leftEntry) ==
-        AspDataGetIteratorIterableIndex(rightEntry) &&
-        AspDataGetIteratorMemberIndex(leftEntry) ==
-        AspDataGetIteratorMemberIndex(rightEntry) &&
+    uint32_t
+        leftIterableIndex = AspDataGetIteratorIterableIndex(leftEntry),
+        rightIterableIndex = AspDataGetIteratorIterableIndex(rightEntry),
+        leftMemberIndex = AspDataGetIteratorMemberIndex(leftEntry),
+        rightMemberIndex = AspDataGetIteratorMemberIndex(rightEntry);
+    int compare =
+        leftIterableIndex == rightIterableIndex &&
+        leftMemberIndex == rightMemberIndex &&
         AspDataGetIteratorStringIndex(leftEntry) ==
         AspDataGetIteratorStringIndex(rightEntry) ?
         0 : 1;
+
+    /* For range iterators, we may need to compare the values. */
+    if (compare != 0)
+    {
+        AspDataEntry *iterable = AspValueEntry(engine, leftIterableIndex);
+        if (AspDataGetType(iterable) == DataType_Range &&
+            leftMemberIndex != 0 && rightMemberIndex != 0)
+        {
+            AspDataEntry
+                *leftValueEntry = AspValueEntry(engine, leftMemberIndex),
+                *rightValueEntry = AspValueEntry(engine, rightMemberIndex);
+            int32_t
+                leftValue = AspDataGetInteger(leftValueEntry),
+                rightValue = AspDataGetInteger(rightValueEntry);
+            compare = leftValue == rightValue ? 0 : 1;
+        }
+    }
+
+    return compare;
 }

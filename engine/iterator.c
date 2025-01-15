@@ -314,11 +314,11 @@ AspRunResult AspIteratorNext
                 return nextResult.result;
             member = nextResult.element;
 
-            if (member != 0 && iterableType == DataType_String)
+            if (iterableType == DataType_String)
             {
                 AspDataSetIteratorStringIndex
                     (iterator,
-                     !reversed ? 0 :
+                     member == 0 || !reversed ? 0 :
                      AspDataGetStringFragmentSize(nextResult.value) - 1U);
             }
 

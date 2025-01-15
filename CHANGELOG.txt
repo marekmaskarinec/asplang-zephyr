@@ -15,6 +15,9 @@ Version 1.2.3.0 (compiler 1.2.1.1, engine 1.2.2.0):
     in application functions that use AspCall.
   - Changed the return type of the API function AspStoreLocal from AspRunResult
     to bool in order to simplify error checking in application code.
+  - Fixed a bug with range iterator comparisons. Previously, two iterators on
+    the same range positioned on the same value within the range would compare
+    not equal. This has been fixed.
 - Standalone application:
   - Fixed handling of memory allocation errors.
 
