@@ -147,6 +147,7 @@ ASP_API bool AspIsDictionary(const AspDataEntry *);
 ASP_API bool AspIsForwardIterator(const AspDataEntry *);
 ASP_API bool AspIsReverseIterator(const AspDataEntry *);
 ASP_API bool AspIsIterator(const AspDataEntry *);
+ASP_API bool AspIsIterable(const AspDataEntry *);
 ASP_API bool AspIsFunction(const AspDataEntry *);
 ASP_API bool AspIsModule(const AspDataEntry *);
 ASP_API bool AspIsAppIntegerObject(const AspDataEntry *);
@@ -175,6 +176,10 @@ ASP_API char AspStringElement
     (AspEngine *, const AspDataEntry *str, int32_t index);
 ASP_API AspDataEntry *AspFind
     (AspEngine *, const AspDataEntry *tree, const AspDataEntry *key);
+ASP_API AspDataEntry *AspAt(AspEngine *, const AspDataEntry *iterator);
+ASP_API bool AspAtSame
+    (AspEngine *,
+     const AspDataEntry *iterator1, const AspDataEntry *iterator2);
 ASP_API AspDataEntry *AspNext(AspEngine *, AspDataEntry *iterator);
 ASP_API bool AspAppObjectTypeValue
     (AspEngine *, const AspDataEntry *, int16_t *);
@@ -215,6 +220,9 @@ ASP_API bool AspListInsert
     (AspEngine *, AspDataEntry *list,
      int32_t index, AspDataEntry *value, bool take);
 ASP_API bool AspListErase(AspEngine *, AspDataEntry *list, int32_t index);
+ASP_API bool AspIteratorInsert
+    (AspEngine *, AspDataEntry *iterator, AspDataEntry *value, bool take);
+ASP_API bool AspIteratorErase(AspEngine *, AspDataEntry *iterator);
 ASP_API bool AspStringAppend
     (AspEngine *, AspDataEntry *str,
      const char *buffer, size_t bufferSize);
@@ -240,8 +248,9 @@ ASP_API AspRunResult AspCall(AspEngine *, AspDataEntry *function);
 ASP_API AspRunResult AspReturnValue(AspEngine *, AspDataEntry **);
 ASP_API int32_t AspNextSymbol(AspEngine *);
 ASP_API AspDataEntry *AspLoadLocal(AspEngine *, int32_t symbol);
-ASP_API AspRunResult AspStoreLocal
+ASP_API bool AspStoreLocal
     (AspEngine *, int32_t symbol, AspDataEntry *value, bool take);
+ASP_API bool AspEraseLocal(AspEngine *, int32_t symbol);
 ASP_API void AspRef(AspEngine *, AspDataEntry *);
 ASP_API void AspUnref(AspEngine *, AspDataEntry *);
 ASP_API AspDataEntry *AspArguments(AspEngine *);

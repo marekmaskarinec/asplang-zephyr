@@ -170,7 +170,7 @@ AspIteratorResult AspIteratorCreate
             /* Copy the iterator. */
             AspDataSetIteratorIterableIndex
                 (iterator, AspIndex(engine, iterable));
-            member = AspValueEntry
+            member = AspEntry
                 (engine, AspDataGetIteratorMemberIndex(oldIterator));
             bool needsCleanup = AspDataGetIteratorMemberNeedsCleanup
                 (oldIterator);

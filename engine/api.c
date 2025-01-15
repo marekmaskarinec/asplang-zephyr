@@ -11,6 +11,7 @@
 #include "assign.h"
 #include "function.h"
 #include "symbols.h"
+#include "compare.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -155,6 +156,21 @@ bool AspIsIterator(const AspDataEntry *entry)
         entry != 0 &&
         (type == DataType_ForwardIterator ||
          type == DataType_ReverseIterator);
+}
+
+bool AspIsIterable(const AspDataEntry *entry)
+{
+    uint8_t type = AspDataGetType(entry);
+    return
+        entry != 0 &&
+        (type == DataType_Range ||
+         type == DataType_String ||
+         type == DataType_Tuple ||
+         type == DataType_List ||
+         type == DataType_Ellipsis ||
+         type == DataType_Module ||
+         type == DataType_Set ||
+         type == DataType_Dictionary);
 }
 
 bool AspIsFunction(const AspDataEntry *entry)
@@ -1050,13 +1066,32 @@ AspDataEntry *AspFind
     return AspIsSet(tree) ? result.key : result.value;
 }
 
-AspDataEntry *AspNext(AspEngine *engine, AspDataEntry *iterator)
+AspDataEntry *AspAt(AspEngine *engine, const AspDataEntry *iterator)
 {
     AspIteratorResult result = AspIteratorDereference(engine, iterator);
-    if (result.result != AspRunResult_OK)
+    return result.result != AspRunResult_OK ? 0 : result.value;
+}
+
+bool AspAtSame
+    (AspEngine *engine,
+     const AspDataEntry *iterator1, const AspDataEntry *iterator2)
+{
+    if (!AspIsIterator(iterator1) || !AspIsIterator(iterator2))
+        return false;
+    int compareResult;
+    AspRunResult result = AspCompare
+        (engine, iterator1, iterator2, AspCompareType_Equality,
+         &compareResult, 0);
+    return result == AspRunResult_OK && compareResult == 0;
+}
+
+AspDataEntry *AspNext(AspEngine *engine, AspDataEntry *iterator)
+{
+    AspDataEntry *result = AspAt(engine, iterator);
+    if (result == 0)
         return 0;
     AspIteratorNext(engine, iterator);
-    return result.value;
+    return result;
 }
 
 bool AspAppObjectTypeValue
@@ -1430,6 +1465,75 @@ bool AspListErase(AspEngine *engine, AspDataEntry *list, int32_t index)
     return AspSequenceErase(engine, list, index, true);
 }
 
+bool AspIteratorInsert
+    (AspEngine *engine, AspDataEntry *iterator, AspDataEntry *value, bool take)
+{
+    /* Ensure the insertion point is an iterator. */
+    AspRunResult assertResult = AspAssert(engine, AspIsIterator(iterator));
+    if (assertResult != AspRunResult_OK)
+        return false;
+
+    /* Ensure the iterator's container is a list. */
+    AspDataEntry *container = AspValueEntry
+        (engine, AspDataGetIteratorIterableIndex(iterator));
+    if (AspDataGetType(container) != DataType_List)
+        return false;
+
+    /* Determine where to insert the value. */
+    AspDataEntry *element = AspEntry
+        (engine, AspDataGetIteratorMemberIndex(iterator));
+    if (AspIsReverseIterator(iterator))
+    {
+        AspSequenceResult nextResult = AspSequenceNext
+            (engine, container, element, true);
+        element = nextResult.element;
+    }
+
+    /* Insert the value at the determined position. */
+    AspSequenceResult result = AspSequenceInsert
+        (engine, container, element, value);
+    if (result.result != AspRunResult_OK)
+        return false;
+    if (!take)
+        AspRef(engine, value);
+
+    return true;
+}
+
+bool AspIteratorErase
+    (AspEngine *engine, AspDataEntry *iterator)
+{
+    /* Ensure the insertion point is an iterator. */
+    AspRunResult assertResult = AspAssert(engine, AspIsIterator(iterator));
+    if (assertResult != AspRunResult_OK)
+        return false;
+
+    /* Get the iterator's container. */
+    AspDataEntry *container = AspValueEntry
+        (engine, AspDataGetIteratorIterableIndex(iterator));
+
+    /* Erase the member from the container. */
+    bool result;
+    AspDataEntry *member = AspEntry
+        (engine, AspDataGetIteratorMemberIndex(iterator));
+    switch (AspDataGetType(container))
+    {
+        default:
+            return false;
+
+        case DataType_List:
+            return AspSequenceEraseElement(engine, container, member, true);
+
+        case DataType_Set:
+        case DataType_Dictionary:
+        {
+            AspRunResult eraseResult = AspTreeEraseNode
+                (engine, container, member, true, true);
+            return eraseResult == AspRunResult_OK;
+        }
+    }
+}
+
 bool AspStringAppend
     (AspEngine *engine, AspDataEntry *str,
      const char *buffer, size_t bufferSize)
@@ -1656,25 +1760,36 @@ AspDataEntry *AspLoadLocal(AspEngine *engine, int32_t symbol)
     return findResult.value;
 }
 
-AspRunResult AspStoreLocal
+bool AspStoreLocal
     (AspEngine *engine, int32_t symbol, AspDataEntry *value, bool take)
 {
     AspTreeResult insertResult = AspTreeTryInsertBySymbol
         (engine, engine->appFunctionNamespace, symbol, value);
     if (insertResult.result != AspRunResult_OK)
-        return insertResult.result;
+        return false;
     if (!insertResult.inserted)
     {
         AspRunResult assignResult = AspAssignSimple
             (engine, insertResult.node, value);
         if (assignResult != AspRunResult_OK)
-            return assignResult;
+            return false;
     }
 
     if (take)
         AspUnref(engine, value);
 
-    return AspRunResult_OK;
+    return true;
+}
+
+bool AspEraseLocal(AspEngine *engine, int32_t symbol)
+{
+    AspTreeResult findResult = AspFindSymbol
+        (engine, engine->appFunctionNamespace, symbol);
+    if (findResult.result != AspRunResult_OK)
+        return false;
+    AspRunResult result = AspTreeEraseNode
+        (engine, engine->appFunctionNamespace, findResult.node, false, true);
+    return result == AspRunResult_OK;
 }
 
 AspDataEntry *AspArguments(AspEngine *engine)

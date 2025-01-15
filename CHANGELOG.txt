@@ -7,6 +7,17 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.0 (compiler 1.2.1.1, engine 1.2.2.0):
+- Engine:
+  - Added several API functions for using iterators in application functions:
+    AspIsIterable, AspAt, AspAtSame, AspIteratorInsert, and AspIteratorErase.
+  - Added API function AspEraseLocal to support removal of local variables used
+    in application functions that use AspCall.
+  - Changed the return type of the API function AspStoreLocal from AspRunResult
+    to bool in order to simplify error checking in application code.
+- Standalone application:
+  - Fixed handling of memory allocation errors.
+
 Version 1.2.2.1 (compiler 1.2.1.1, engine 1.2.1.0):
 - Compiler:
   - Renamed the -s option (silent) to -q (quiet) to be compatible with the aspg

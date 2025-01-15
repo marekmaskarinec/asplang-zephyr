@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <set>
 #include <string>
+#include <new>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -349,7 +350,7 @@ int main(int argc, char **argv)
     auto code = unique_ptr<char[]>();
     if (codeByteCount != 0)
     {
-        code.reset(new char[codeByteCount]);
+        code.reset(new (nothrow) char[codeByteCount]);
         if (code == nullptr)
         {
             cerr << "Error allocating engine code area" << endl;
@@ -357,7 +358,7 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    auto data = unique_ptr<char[]>(new char [dataByteSize]);
+    auto data = unique_ptr<char[]>(new (nothrow) char[dataByteSize]);
     if (data == nullptr)
     {
         cerr << "Error allocating engine data area" << endl;
@@ -409,7 +410,7 @@ int main(int argc, char **argv)
             return 2;
         }
         auto externalCodeSize = static_cast<size_t>(tellResult);
-        externalCode.reset(new char[externalCodeSize]);
+        externalCode.reset(new (nothrow) char[externalCodeSize]);
         if (externalCode == nullptr)
         {
             cerr << "Error allocating memory for executable code" << endl;
@@ -612,6 +613,7 @@ int main(int argc, char **argv)
     AspDump(&engine, dumpFile);
     #endif
 
+    // Report the number of instructions executed in debug mode.
     #ifdef ASP_DEBUG
     fprintf(reportFile, "---\nExecuted %u instructions\n", stepCount);
     if (stepCountLimit != UINT_MAX && stepCount != stepCountLimit)

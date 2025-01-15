@@ -74,7 +74,7 @@ AspRunResult AspRangeCount
     AspAssert
         (engine, range != 0 && AspDataGetType(range) == DataType_Range);
     if (engine->runResult != AspRunResult_OK)
-        return 0;
+        return engine->runResult;
 
     int32_t start, end, step;
     bool bounded;
