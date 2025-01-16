@@ -33,6 +33,33 @@ ASP_LIB_API AspRunResult AspLib_reversed
     return result.result;
 }
 
+/* at(iterator, end = None)
+ * Return the current item at the iterator, returning the given end value
+   if the iterator is at its end.
+ */
+ASP_LIB_API AspRunResult AspLib_at
+    (AspEngine *engine,
+     AspDataEntry *iterator, AspDataEntry *end,
+     AspDataEntry **returnValue)
+{
+    /* Dereference the iterator. */
+    AspIteratorResult dereferenceResult = AspIteratorDereference
+        (engine, iterator);
+    if (dereferenceResult.result == AspRunResult_IteratorAtEnd)
+    {
+        AspRef(engine, end);
+        *returnValue = end;
+        return AspRunResult_OK;
+    }
+    else if (dereferenceResult.result != AspRunResult_OK)
+        return dereferenceResult.result;
+
+    /* Store the dereferenced value. */
+    *returnValue = dereferenceResult.value;
+
+    return AspRunResult_OK;
+}
+
 /* next(iterator, end = None)
  * Return the next item from the iterator, returning the given end value
    if the iterator has reached its end.
@@ -59,4 +86,25 @@ ASP_LIB_API AspRunResult AspLib_next
 
     /* Advance the iterator. */
     return AspIteratorNext(engine, iterator);
+}
+
+/* del_at(iterator)
+ * Delete the item at the iterator, returning the removed item.
+ */
+ASP_LIB_API AspRunResult AspLib_del_at
+    (AspEngine *engine,
+     AspDataEntry *iterator,
+     AspDataEntry **returnValue)
+{
+    /* Dereference the iterator. */
+    AspIteratorResult dereferenceResult = AspIteratorDereference
+        (engine, iterator);
+    if (dereferenceResult.result != AspRunResult_OK)
+        return dereferenceResult.result;
+
+    /* Store the dereferenced value. */
+    *returnValue = dereferenceResult.value;
+
+    /* Remove the item. */
+    return AspIteratorErase(engine, iterator);
 }

@@ -220,9 +220,9 @@ ASP_API bool AspListInsert
     (AspEngine *, AspDataEntry *list,
      int32_t index, AspDataEntry *value, bool take);
 ASP_API bool AspListErase(AspEngine *, AspDataEntry *list, int32_t index);
-ASP_API bool AspIteratorInsert
+ASP_API bool AspInsertAt
     (AspEngine *, AspDataEntry *iterator, AspDataEntry *value, bool take);
-ASP_API bool AspIteratorErase(AspEngine *, AspDataEntry *iterator);
+ASP_API bool AspEraseAt(AspEngine *, AspDataEntry *iterator);
 ASP_API bool AspStringAppend
     (AspEngine *, AspDataEntry *str,
      const char *buffer, size_t bufferSize);

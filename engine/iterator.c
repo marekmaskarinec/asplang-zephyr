@@ -535,6 +535,100 @@ AspIteratorResult AspIteratorDereference
     return result;
 }
 
+AspRunResult AspIteratorInsert
+    (AspEngine *engine, AspDataEntry *iterator, AspDataEntry *value, bool take)
+{
+    AspRunResult assertResult = AspAssert(engine, iterator != 0);
+    if (assertResult != AspRunResult_OK)
+        return assertResult;
+
+    /* Ensure the insertion point is an iterator. */
+    if (!AspIsIterator(iterator))
+        return AspRunResult_UnexpectedType;
+
+    /* Ensure the iterator's container is a list. */
+    AspDataEntry *container = AspValueEntry
+        (engine, AspDataGetIteratorIterableIndex(iterator));
+    if (AspDataGetType(container) != DataType_List)
+        return AspRunResult_UnexpectedType;
+
+    /* Determine where to insert the value. */
+    AspDataEntry *element = AspEntry
+        (engine, AspDataGetIteratorMemberIndex(iterator));
+    if (AspIsReverseIterator(iterator))
+    {
+        AspSequenceResult nextResult = AspSequenceNext
+            (engine, container, element, true);
+        element = nextResult.element;
+    }
+
+    /* Insert the value at the determined position. */
+    AspSequenceResult result = AspSequenceInsert
+        (engine, container, element, value);
+    if (result.result != AspRunResult_OK)
+        return result.result;
+    if (!take)
+        AspRef(engine, value);
+
+    return AspRunResult_OK;
+}
+
+AspRunResult AspIteratorErase
+    (AspEngine *engine, AspDataEntry *iterator)
+{
+    AspRunResult assertResult = AspAssert(engine, iterator != 0);
+    if (assertResult != AspRunResult_OK)
+        return assertResult;
+
+    /* Ensure the erasure point is an iterator. */
+    if (!AspIsIterator(iterator))
+        return AspRunResult_UnexpectedType;
+
+    /* Get the iterator's container. */
+    AspDataEntry *container = AspValueEntry
+        (engine, AspDataGetIteratorIterableIndex(iterator));
+
+    /* Fetch the member at the erasure point. */
+    bool result;
+    AspDataEntry *member = AspEntry
+        (engine, AspDataGetIteratorMemberIndex(iterator));
+
+    /* Advance the iterator beyond the erasure point. */
+    AspRunResult nextResult = AspIteratorNext(engine, iterator);
+    if (nextResult != AspRunResult_OK)
+        return nextResult;
+
+    /* Erase the member from the container. */
+    if (member == 0)
+        return AspRunResult_IteratorAtEnd;
+    switch (AspDataGetType(container))
+    {
+        default:
+            return AspRunResult_UnexpectedType;
+
+        case DataType_List:
+        {
+            bool eraseResult = AspSequenceEraseElement
+                (engine, container, member, true);
+            if (!eraseResult)
+                return AspRunResult_ValueOutOfRange;
+            break;
+        }
+
+        case DataType_Set:
+        case DataType_Dictionary:
+        {
+            AspRunResult eraseResult = AspTreeEraseNode
+                (engine, container, member, true, true);
+            if (eraseResult != AspRunResult_OK);
+                return eraseResult;
+            break;
+        }
+    }
+
+    return AspRunResult_OK;
+}
+
 static bool ReversedRangeIteratorAtEnd
     (int32_t testValue,
      int32_t startValue, int32_t endValue, int32_t stepValue)

@@ -15,9 +15,20 @@ lib
 def iter(iterable) = AspLib_iter
 def reversed(iterable) = AspLib_reversed
 
+# Iterator dereference.
+# Returns the referenced value without advancing the iterator.
+def at(iterator, end = None) = AspLib_at
+
 # Iterator advance.
 # Returns the referenced value, advancing the iterator in the process.
 def next(iterator, end = None) = AspLib_next
+
+# Collection member removal using an iterator. The iterator must refer to a
+# member of a mutable container (i.e., a list, set, or dictionary). Note that
+# using an iterator at its end will cause an error.
+# Returns the removed value and advances the iterator to the item following the
+# removed item.
+def del_at(iterator) = AspLib_del_at
 
 # Note: Use conversion to bool to test an iterator. A value of False
 # indicates an iterator at its end.

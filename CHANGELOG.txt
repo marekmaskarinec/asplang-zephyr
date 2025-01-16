@@ -9,12 +9,19 @@ Changes
 
 Version 1.2.3.0 (compiler 1.2.1.1, engine 1.2.2.0):
 - Engine:
+  - Added script-callable functions for working with iterators: at and del_at.
+    - NOTE: Although this is not a new ABI version of the engine, any
+      scripts written for applications that include the iter library
+      specification will need to be recompiled unless these new functions are
+      explicitly deleted from the application's function specification.
   - Added several API functions for using iterators in application functions:
-    AspIsIterable, AspAt, AspAtSame, AspIteratorInsert, and AspIteratorErase.
+    AspIsIterable, AspAt, AspAtSame, AspInsertAt, and AspEraseAt.
   - Added API function AspEraseLocal to support removal of local variables used
     in application functions that use AspCall.
   - Changed the return type of the API function AspStoreLocal from AspRunResult
     to bool in order to simplify error checking in application code.
+  - Removed asserts from API functions in favour of using only appropriate
+    return values to indicate calling errors.
   - Fixed a bug with range iterator comparisons. Previously, two iterators on
     the same range positioned on the same value within the range would compare
     not equal. This has been fixed.

@@ -25,6 +25,10 @@ AspRunResult AspIteratorNext
     (AspEngine *, AspDataEntry *iterator);
 AspIteratorResult AspIteratorDereference
     (AspEngine *, const AspDataEntry *iterator);
+AspRunResult AspIteratorInsert
+    (AspEngine *, AspDataEntry *iterator, AspDataEntry *value, bool take);
+AspRunResult AspIteratorErase
+    (AspEngine *, AspDataEntry *iterator);
 
 #ifdef __cplusplus
 }

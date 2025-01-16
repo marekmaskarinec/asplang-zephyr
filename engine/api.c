@@ -1377,6 +1377,9 @@ AspDataEntry *AspNewAppPointerObject
 
 AspDataEntry *AspNewType(AspEngine *engine, const AspDataEntry *object)
 {
+    if (object == 0)
+        return 0;
+
     AspDataEntry *entry = NewObject(engine, DataType_Type);
     if (entry != 0)
         AspDataSetTypeValue(entry, AspDataGetType(object));
@@ -1398,10 +1401,8 @@ bool AspTupleAppend
     (AspEngine *engine, AspDataEntry *tuple, AspDataEntry *value, bool take)
 {
     /* Ensure the container is a tuple that is not referenced anywhere else. */
-    AspAssert(engine, AspDataGetType(tuple) == DataType_Tuple);
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetUseCount(tuple) == 1);
-    if (assertResult != AspRunResult_OK)
+    if (tuple == 0 || AspDataGetType(tuple) != DataType_Tuple ||
+        AspDataGetUseCount(tuple) != 1)
         return false;
 
     AspSequenceResult result = AspSequenceAppend(engine, tuple, value);
@@ -1418,9 +1419,7 @@ bool AspListAppend
     (AspEngine *engine, AspDataEntry *list, AspDataEntry *value, bool take)
 {
     /* Ensure the container is a list, not a tuple. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(list) == DataType_List);
-    if (assertResult != AspRunResult_OK)
+    if (list == 0 || AspDataGetType(list) != DataType_List)
         return false;
 
     AspSequenceResult result = AspSequenceAppend(engine, list, value);
@@ -1438,9 +1437,7 @@ bool AspListInsert
      int32_t index, AspDataEntry *value, bool take)
 {
     /* Ensure the container is a list, not a tuple. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(list) == DataType_List);
-    if (assertResult != AspRunResult_OK)
+    if (list == 0 || AspDataGetType(list) != DataType_List)
         return false;
 
     AspSequenceResult result = AspSequenceInsertByIndex
@@ -1457,81 +1454,24 @@ bool AspListInsert
 bool AspListErase(AspEngine *engine, AspDataEntry *list, int32_t index)
 {
     /* Ensure the container is a list, not a tuple. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(list) == DataType_List);
-    if (assertResult != AspRunResult_OK)
+    if (list == 0 || AspDataGetType(list) != DataType_List)
         return false;
 
     return AspSequenceErase(engine, list, index, true);
 }
 
-bool AspIteratorInsert
+bool AspInsertAt
     (AspEngine *engine, AspDataEntry *iterator, AspDataEntry *value, bool take)
 {
-    /* Ensure the insertion point is an iterator. */
-    AspRunResult assertResult = AspAssert(engine, AspIsIterator(iterator));
-    if (assertResult != AspRunResult_OK)
-        return false;
-
-    /* Ensure the iterator's container is a list. */
-    AspDataEntry *container = AspValueEntry
-        (engine, AspDataGetIteratorIterableIndex(iterator));
-    if (AspDataGetType(container) != DataType_List)
-        return false;
-
-    /* Determine where to insert the value. */
-    AspDataEntry *element = AspEntry
-        (engine, AspDataGetIteratorMemberIndex(iterator));
-    if (AspIsReverseIterator(iterator))
-    {
-        AspSequenceResult nextResult = AspSequenceNext
-            (engine, container, element, true);
-        element = nextResult.element;
-    }
-
-    /* Insert the value at the determined position. */
-    AspSequenceResult result = AspSequenceInsert
-        (engine, container, element, value);
-    if (result.result != AspRunResult_OK)
-        return false;
-    if (!take)
-        AspRef(engine, value);
-
-    return true;
+    AspRunResult result = AspIteratorInsert(engine, iterator, value, take);
+    return result == AspRunResult_OK;
 }
 
-bool AspIteratorErase
+bool AspEraseAt
     (AspEngine *engine, AspDataEntry *iterator)
 {
-    /* Ensure the insertion point is an iterator. */
-    AspRunResult assertResult = AspAssert(engine, AspIsIterator(iterator));
-    if (assertResult != AspRunResult_OK)
-        return false;
-
-    /* Get the iterator's container. */
-    AspDataEntry *container = AspValueEntry
-        (engine, AspDataGetIteratorIterableIndex(iterator));
-
-    /* Erase the member from the container. */
-    bool result;
-    AspDataEntry *member = AspEntry
-        (engine, AspDataGetIteratorMemberIndex(iterator));
-    switch (AspDataGetType(container))
-    {
-        default:
-            return false;
-
-        case DataType_List:
-            return AspSequenceEraseElement(engine, container, member, true);
-
-        case DataType_Set:
-        case DataType_Dictionary:
-        {
-            AspRunResult eraseResult = AspTreeEraseNode
-                (engine, container, member, true, true);
-            return eraseResult == AspRunResult_OK;
-        }
-    }
+    AspRunResult result = AspIteratorErase(engine, iterator);
+    return result == AspRunResult_OK;
 }
 
 bool AspStringAppend
@@ -1539,10 +1479,8 @@ bool AspStringAppend
      const char *buffer, size_t bufferSize)
 {
     /* Ensure we're using a string that is not referenced anywhere else. */
-    AspAssert(engine, AspDataGetType(str) == DataType_String);
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetUseCount(str) == 1);
-    if (assertResult != AspRunResult_OK)
+    if (str == 0 || AspDataGetType(str) != DataType_String ||
+        AspDataGetUseCount(str) == 1)
         return false;
 
     AspRunResult result = AspStringAppendBuffer
@@ -1554,9 +1492,7 @@ bool AspSetInsert
     (AspEngine *engine, AspDataEntry *set, AspDataEntry *key, bool take)
 {
     /* Ensure the container is a set. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(set) == DataType_Set);
-    if (assertResult != AspRunResult_OK)
+    if (set == 0 || AspDataGetType(set) != DataType_Set)
         return false;
 
     AspTreeResult result = AspTreeInsert
@@ -1573,9 +1509,7 @@ bool AspSetInsert
 bool AspSetErase(AspEngine *engine, AspDataEntry *set, const AspDataEntry *key)
 {
     /* Ensure the container is a set. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(set) == DataType_Set);
-    if (assertResult != AspRunResult_OK)
+    if (set == 0 || AspDataGetType(set) != DataType_Set)
         return false;
 
     AspTreeResult findResult = AspTreeFind(engine, set, key);
@@ -1591,9 +1525,7 @@ bool AspDictionaryInsert
      AspDataEntry *key, AspDataEntry *value, bool take)
 {
     /* Ensure the container is a dictionary. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(dictionary) == DataType_Dictionary);
-    if (assertResult != AspRunResult_OK)
+    if (dictionary == 0 || AspDataGetType(dictionary) != DataType_Dictionary)
         return false;
 
     AspTreeResult result = AspTreeInsert
@@ -1614,9 +1546,7 @@ bool AspDictionaryErase
     (AspEngine *engine, AspDataEntry *dictionary, const AspDataEntry *key)
 {
     /* Ensure the container is a dictionary. */
-    AspRunResult assertResult = AspAssert
-        (engine, AspDataGetType(dictionary) == DataType_Dictionary);
-    if (assertResult != AspRunResult_OK)
+    if (dictionary == 0 || AspDataGetType(dictionary) != DataType_Dictionary)
         return false;
 
     AspTreeResult findResult = AspTreeFind(engine, dictionary, key);
@@ -1630,6 +1560,9 @@ bool AspDictionaryErase
 bool AspAddPositionalArgument
     (AspEngine *engine, AspDataEntry *value, bool take)
 {
+    if (value == 0)
+        return false;
+
     if (!PrepareArgumentList(engine))
         return false;
 
@@ -1648,6 +1581,9 @@ bool AspAddPositionalArgument
 bool AspAddNamedArgument
     (AspEngine *engine, int32_t symbol, AspDataEntry *value, bool take)
 {
+    if (value == 0)
+        return false;
+
     if (!PrepareArgumentList(engine))
         return false;
 

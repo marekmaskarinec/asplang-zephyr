@@ -21,6 +21,10 @@ AspRunResult AspExpandIterableGroupArgument
     (AspEngine *engine, AspDataEntry *argumentList,
      const AspDataEntry *iterable)
 {
+    AspRunResult assertResult = AspAssert(engine, iterable != 0);
+    if (assertResult != AspRunResult_OK)
+        return assertResult;
+
     switch (AspDataGetType(iterable))
     {
         default:
@@ -198,6 +202,10 @@ AspRunResult AspExpandDictionaryGroupArgument
     (AspEngine *engine, AspDataEntry *argumentList,
      const AspDataEntry *dictionary)
 {
+    AspRunResult assertResult = AspAssert(engine, dictionary != 0);
+    if (assertResult != AspRunResult_OK)
+        return assertResult;
+
     if (AspDataGetType(dictionary) != DataType_Dictionary)
         return AspRunResult_UnexpectedType;
 
