@@ -926,6 +926,8 @@ static const char *TypeString(DataType type)
             return "int";
         case DataType_Float:
             return "float";
+        case DataType_Symbol:
+            return "symbol";
         case DataType_Range:
             return "range";
         case DataType_String:
@@ -938,14 +940,14 @@ static const char *TypeString(DataType type)
             return "set";
         case DataType_Dictionary:
             return "dict";
-        case DataType_ForwardIterator:
-            return "iter";
-        case DataType_ReverseIterator:
-            return "iter-rev";
         case DataType_Function:
             return "func";
         case DataType_Module:
             return "mod";
+        case DataType_ReverseIterator:
+            return "iter-rev";
+        case DataType_ForwardIterator:
+            return "iter";
         case DataType_AppIntegerObject:
             return "app-int";
         case DataType_AppPointerObject:
