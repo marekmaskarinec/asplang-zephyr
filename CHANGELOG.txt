@@ -25,6 +25,7 @@ Version 1.2.3.0 (compiler 1.2.1.1, engine 1.2.2.0):
   - Fixed a bug with range iterator comparisons. Previously, two iterators on
     the same range positioned on the same value within the range would compare
     not equal. This has been fixed.
+  - Fixed an omission in the conversion of the symbol type to a string.
 - Standalone application:
   - Fixed handling of memory allocation errors.
 
