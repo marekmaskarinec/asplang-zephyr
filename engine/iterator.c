@@ -589,7 +589,6 @@ AspRunResult AspIteratorErase
         (engine, AspDataGetIteratorIterableIndex(iterator));
 
     /* Fetch the member at the erasure point. */
-    bool result;
     AspDataEntry *member = AspEntry
         (engine, AspDataGetIteratorMemberIndex(iterator));
 
