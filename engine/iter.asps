@@ -30,5 +30,8 @@ def next(iterator, end = None) = AspLib_next
 # removed item.
 def del_at(iterator) = AspLib_del_at
 
+# Access to the collection for a given iterator.
+def iterable(iterator) = AspLib_iterable
+
 # Note: Use conversion to bool to test an iterator. A value of False
 # indicates an iterator at its end.

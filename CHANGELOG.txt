@@ -7,6 +7,15 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.1 (compiler 1.2.1.1, engine 1.2.2.1):
+- Engine:
+  - Added API function AspIterable and script-callable function iterable for
+    obtaining the iterable of a given iterator.
+    - NOTE: Although this is not a new ABI version of the engine, any
+      scripts written for applications that include the iter library
+      specification will need to be recompiled unless the new iterable function
+      is explicitly deleted from the application's function specification.
+
 Version 1.2.3.0 (compiler 1.2.1.1, engine 1.2.2.0):
 - Engine:
   - Added script-callable functions for working with iterators: at and del_at.

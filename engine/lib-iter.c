@@ -108,3 +108,18 @@ ASP_LIB_API AspRunResult AspLib_del_at
     /* Remove the item. */
     return AspIteratorErase(engine, iterator);
 }
+
+/* iterable(iterator)
+ * Return the iterable for the given iterator, or None if the parameter is not
+ * an iterator.
+ */
+ASP_LIB_API AspRunResult AspLib_iterable
+    (AspEngine *engine,
+     AspDataEntry *iterator,
+     AspDataEntry **returnValue)
+{
+    AspDataEntry *iterable = AspIterable(engine, iterator);
+    if (iterable != 0)
+        *returnValue = iterable;
+    return AspRunResult_OK;
+}

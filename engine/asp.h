@@ -181,6 +181,7 @@ ASP_API bool AspAtSame
     (AspEngine *,
      const AspDataEntry *iterator1, const AspDataEntry *iterator2);
 ASP_API AspDataEntry *AspNext(AspEngine *, AspDataEntry *iterator);
+ASP_API AspDataEntry *AspIterable(AspEngine *, const AspDataEntry *iterator);
 ASP_API bool AspAppObjectTypeValue
     (AspEngine *, const AspDataEntry *, int16_t *);
 ASP_API bool AspAppIntegerObjectValues

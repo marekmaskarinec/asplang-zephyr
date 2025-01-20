@@ -1096,6 +1096,14 @@ AspDataEntry *AspNext(AspEngine *engine, AspDataEntry *iterator)
     return result;
 }
 
+AspDataEntry *AspIterable(AspEngine *engine, const AspDataEntry *iterator)
+{
+    if (!AspIsIterator(iterator))
+        return 0;
+    return AspValueEntry
+        (engine, AspDataGetIteratorIterableIndex(iterator));
+}
+
 bool AspAppObjectTypeValue
     (AspEngine *engine, const AspDataEntry *entry, int16_t *appType)
 {
