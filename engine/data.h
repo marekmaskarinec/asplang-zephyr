@@ -260,6 +260,10 @@ int32_t AspDataGetSignedWord3(const AspDataEntry *);
     ((eptr)->s.s[11] = (value))
 #define AspDataGetIteratorStringIndex(eptr) \
     ((eptr)->s.s[11])
+#define AspDataSetIteratorCollectionIndex(eptr, value) \
+    (AspDataSetWord3((eptr), (value)))
+#define AspDataGetIteratorCollectionIndex(eptr) \
+    (AspDataGetWord3((eptr)))
 
 /* Function entry field access. */
 #define AspDataSetFunctionIsApp(eptr, value) \

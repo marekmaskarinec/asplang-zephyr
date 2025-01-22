@@ -7,6 +7,12 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.2 (compiler 1.2.1.1, engine 1.2.2.2):
+- Engine:
+  - Added checks to ensure that local scope iterators (i.e., iterators created
+    with the ... object) are not used outside the context in which they were
+    created. Such a violation now causes the script to end in error.
+
 Version 1.2.3.1 (compiler 1.2.1.1, engine 1.2.2.1):
 - Engine:
   - Added API function AspIterable and script-callable function iterable for

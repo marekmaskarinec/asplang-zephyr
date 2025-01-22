@@ -143,9 +143,14 @@ AspIteratorResult AspIteratorCreate
         case DataType_Module:
             iterable =
                 iterableType == DataType_Module ?
-                AspValueEntry
-                    (engine, AspDataGetModuleNamespaceIndex(iterable)) :
+                AspEntry(engine, AspDataGetModuleNamespaceIndex(iterable)) :
                 engine->localNamespace;
+
+            /* Store the underlying namespace for local scope iterators so that
+               it can be checked later. */
+            if (iterableType == DataType_Ellipsis)
+                AspDataSetIteratorCollectionIndex
+                    (iterator, AspIndex(engine, iterable));
 
             /* Fall through... */
 
@@ -178,9 +183,13 @@ AspIteratorResult AspIteratorCreate
             if (needsCleanup)
                 AspRef(engine, member);
             reversed = (iterableType == DataType_ReverseIterator) != reversed;
-            if (AspDataGetType(iterable) == DataType_String)
+            uint8_t iterableType = AspDataGetType(iterable);
+            if (iterableType == DataType_String)
                 AspDataSetIteratorStringIndex
                     (iterator, AspDataGetIteratorStringIndex(oldIterator));
+            else if (iterableType == DataType_Ellipsis)
+                AspDataSetIteratorCollectionIndex
+                    (iterator, AspDataGetIteratorCollectionIndex(oldIterator));
         }
     }
     AspDataSetIteratorMemberIndex(iterator, AspIndex(engine, member));
@@ -327,11 +336,17 @@ AspRunResult AspIteratorNext
 
         case DataType_Ellipsis:
         case DataType_Module:
-            iterable =
-                iterableType == DataType_Module ?
-                AspValueEntry
-                    (engine, AspDataGetModuleNamespaceIndex(iterable)) :
-                engine->localNamespace;
+            iterable = AspEntry
+                (engine,
+                 iterableType == DataType_Ellipsis ?
+                 AspDataGetIteratorCollectionIndex(iterator) :
+                 AspDataGetModuleNamespaceIndex(iterable));
+
+            /* Disallow a local scope iterator from being manipulated outside
+               the scope in which it was created. */
+            if (iterableType == DataType_Ellipsis &&
+                iterable != engine->localNamespace)
+                return AspRunResult_InvalidContext;
 
             /* Fall through... */
 
@@ -468,11 +483,20 @@ AspIteratorResult AspIteratorDereference
 
         case DataType_Ellipsis:
         case DataType_Module:
-            iterable =
-                iterableType == DataType_Module ?
-                AspValueEntry
-                    (engine, AspDataGetModuleNamespaceIndex(iterable)) :
-                engine->localNamespace;
+            iterable = AspEntry
+                (engine,
+                 iterableType == DataType_Ellipsis ?
+                 AspDataGetIteratorCollectionIndex(iterator) :
+                 AspDataGetModuleNamespaceIndex(iterable));
+
+            /* Disallow a local scope iterator from being used outside the
+               scope in which it was created. */
+            if (iterableType == DataType_Ellipsis &&
+                iterable != engine->localNamespace)
+            {
+                result.result = AspRunResult_InvalidContext;
+                return result;
+            }
 
             /* Fall through... */
 
