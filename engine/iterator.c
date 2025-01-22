@@ -591,8 +591,8 @@ AspRunResult AspIteratorInsert
         (engine, container, element, value);
     if (result.result != AspRunResult_OK)
         return result.result;
-    if (!take)
-        AspRef(engine, value);
+    if (take)
+        AspUnref(engine, value);
 
     return AspRunResult_OK;
 }
