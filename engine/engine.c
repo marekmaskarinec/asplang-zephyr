@@ -396,6 +396,7 @@ static AspRunResult ResetData(AspEngine *engine)
     AspRef(engine, engine->noneSingleton);
 
     /* Initialize singletons for other commonly used objects. */
+    engine->ellipsisSingleton = 0;
     engine->falseSingleton = 0;
     engine->trueSingleton = 0;
 

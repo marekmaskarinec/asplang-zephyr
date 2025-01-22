@@ -104,7 +104,9 @@ struct AspEngine
     uint32_t cycleDetectionLimit;
 
     /* Singletons for commonly used values. */
-    AspDataEntry *noneSingleton, *falseSingleton, *trueSingleton;
+    AspDataEntry
+        *noneSingleton, *ellipsisSingleton,
+        *falseSingleton, *trueSingleton;
 
     /* Stack. */
     AspDataEntry *stackTop;

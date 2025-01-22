@@ -1165,7 +1165,16 @@ AspDataEntry *AspNewNone(AspEngine *engine)
 
 AspDataEntry *AspNewEllipsis(AspEngine *engine)
 {
-    return NewObject(engine, DataType_Ellipsis);
+    /* Return the Ellipsis singleton. */
+    AspDataEntry **singleton = &engine->ellipsisSingleton;
+    if (*singleton != 0)
+        AspRef(engine, *singleton);
+    else
+    {
+        /* Create the singleton. */
+        *singleton = NewObject(engine, DataType_Ellipsis);
+    }
+    return *singleton;
 }
 
 AspDataEntry *AspNewBoolean(AspEngine *engine, bool value)

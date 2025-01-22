@@ -42,6 +42,10 @@ void AspUnref(AspEngine *engine, AspDataEntry *entry)
                     &engine->trueSingleton : &engine->falseSingleton;
                 *singleton = 0;
             }
+            else if (t == DataType_Ellipsis)
+            {
+                engine->ellipsisSingleton = 0;
+            }
             else if (t == DataType_Range)
             {
                 if (AspDataGetRangeHasStart(entry))
