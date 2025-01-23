@@ -14,6 +14,8 @@ Version 1.2.3.2 (compiler 1.2.1.1, engine 1.2.2.2):
     created. Such a violation now causes the script to end in error.
   - Corrected storage of the Ellipsis object to be a singleton.
   - Fixed a memory leak in the API function AspIteratorInsert.
+  - Fixed a bug that occurred when AspStoreLocal replaced an existing symbol
+    entry with the same object (i.e., itself).
 
 Version 1.2.3.1 (compiler 1.2.1.1, engine 1.2.2.1):
 - Engine:

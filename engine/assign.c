@@ -22,6 +22,7 @@ AspRunResult AspAssignSimple
     if (assertResult != AspRunResult_OK)
         return assertResult;
 
+    AspRef(engine, newValue);
     uint32_t newValueIndex = AspIndex(engine, newValue);
     switch (addressType)
     {
@@ -55,7 +56,6 @@ AspRunResult AspAssignSimple
         }
     }
 
-    AspRef(engine, newValue);
     return AspRunResult_OK;
 }
 
