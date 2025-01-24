@@ -16,6 +16,7 @@ Version 1.2.3.2 (compiler 1.2.1.1, engine 1.2.2.2):
   - Fixed a memory leak in the API function AspIteratorInsert.
   - Fixed a bug that occurred when AspStoreLocal replaced an existing symbol
     entry with the same object (i.e., itself).
+  - Added API function AspUseCount, available only in debug builds.
 
 Version 1.2.3.1 (compiler 1.2.1.1, engine 1.2.2.1):
 - Engine:

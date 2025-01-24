@@ -12,6 +12,11 @@
 static void DumpData(const AspEngine *, FILE *);
 static void DumpDataEntry(uint32_t index, const AspDataEntry *, FILE *);
 
+uint32_t AspUseCount(const AspDataEntry *entry)
+{
+    return entry == 0 ? 0 : AspDataGetUseCount(entry);
+}
+
 void AspTraceFile(AspEngine *engine, FILE *fp)
 {
     engine->traceFile = fp;
