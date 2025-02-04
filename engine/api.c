@@ -1499,7 +1499,7 @@ bool AspStringAppend
 {
     /* Ensure we're using a string that is not referenced anywhere else. */
     if (str == 0 || AspDataGetType(str) != DataType_String ||
-        AspDataGetUseCount(str) == 1)
+        AspDataGetUseCount(str) != 1)
         return false;
 
     AspRunResult result = AspStringAppendBuffer

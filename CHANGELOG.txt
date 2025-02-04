@@ -7,6 +7,13 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.3 (compiler 1.2.1.1, engine 1.2.2.3):
+- Engine:
+  - Fixed a regression introduced into API function AspStringAppend from
+    version 1.2.3.0 when asserts in many API functions were replaced with
+    appropriate return values to indicate calling errors. The regression caused
+    the function to fail in valid conditions.
+
 Version 1.2.3.2 (compiler 1.2.1.1, engine 1.2.2.2):
 - Engine:
   - Added checks to ensure that local scope iterators (i.e., iterators created
