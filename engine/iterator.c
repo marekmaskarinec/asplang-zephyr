@@ -643,7 +643,7 @@ AspRunResult AspIteratorErase
         {
             AspRunResult eraseResult = AspTreeEraseNode
                 (engine, container, member, true, true);
-            if (eraseResult != AspRunResult_OK);
+            if (eraseResult != AspRunResult_OK)
                 return eraseResult;
             break;
         }
