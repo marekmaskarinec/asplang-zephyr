@@ -16,8 +16,6 @@ static const string SourceInfoVersion = "\x01";
 static void WriteItem(ostream &, const string &);
 static void WriteItem(ostream &, uint32_t);
 
-static const uint32_t MaxCodeSize = 0x10000000;
-
 Executable::Executable(SymbolTable &symbolTable) :
     symbolTable(symbolTable)
 {
@@ -85,7 +83,7 @@ unsigned Executable::ModuleOffset(const string &name) const
 void Executable::Finalize()
 {
     // Assign offsets to each instruction.
-    unsigned offset = 0;
+    uint32_t offset = 0;
     for (auto instructionIter = instructions.begin();
          instructionIter != instructions.end(); instructionIter++)
     {
@@ -104,9 +102,10 @@ void Executable::Finalize()
         offset += instruction->Size();
     }
 
-    // Check final code size.
+    // Check and store the final code size.
     if (offset > MaxCodeSize)
         throw string("Code too large");
+    finalCodeSize = offset;
 
     // Fix up target locations.
     for (const auto &instructionInfo: instructions)
@@ -117,6 +116,11 @@ void Executable::Finalize()
             instruction->Fix
                 (instruction->TargetLocation()->instruction->Offset());
     }
+}
+
+uint32_t Executable::FinalCodeSize() const
+{
+    return finalCodeSize;
 }
 
 void Executable::Write(ostream &os) const

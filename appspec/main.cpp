@@ -157,6 +157,12 @@ static int main1(int argc, char **argv)
         }
         else if (option == "c")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             outputCodeBaseName = (++argv)[1];
             argc--;
         }
@@ -164,6 +170,12 @@ static int main1(int argc, char **argv)
             quiet = true;
         else if (option == "s")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             outputSpecBaseName = (++argv)[1];
             argc--;
         }

@@ -30,6 +30,9 @@ class Executable
 
     public:
 
+        // Constants.
+        static const uint32_t MaxCodeSize = 0x10000000;
+
         // Constructor, destructor.
         explicit Executable(SymbolTable &);
         ~Executable();
@@ -54,8 +57,9 @@ class Executable
         void MarkModuleLocation(const std::string &name, const Location &);
         unsigned ModuleOffset(const std::string &name) const;
 
-        // Finalize method.
+        // Finalize methods.
         void Finalize();
+        uint32_t FinalCodeSize() const;
 
         // Output methods.
         void Write(std::ostream &) const;
@@ -75,6 +79,7 @@ class Executable
         SymbolTable &symbolTable;
         std::list<InstructionInfo> instructions;
         Location currentLocation = instructions.end();
+        std::uint32_t finalCodeSize = 0;
         std::stack<Location> locationStack;
         std::map<unsigned, std::pair<Location, unsigned> > moduleLocations;
 };

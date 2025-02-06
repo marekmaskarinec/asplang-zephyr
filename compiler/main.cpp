@@ -10,6 +10,7 @@
 #include "search-path.hpp"
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <cstdio>
 #include <string>
 #include <cstring>
@@ -29,6 +30,8 @@
 #ifndef FILE_NAME_SEPARATORS
 #error FILE_NAME_SEPARATORS macro undefined
 #endif
+
+static const double DefaultCodeSizeWarningRatio = 0.8;
 
 // Lemon parser.
 extern "C" {
@@ -98,7 +101,14 @@ static void Usage()
         << COMMAND_OPTION_PREFIXES[0]
         << "q          Quiet. Don't output usual compiler information.\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "v          Print version information and exit.\n";
+        << "v          Print version information and exit.\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "w PERCENT  Code size warning level, as a percentage of the"
+        << " maximum. A warning\n"
+        << "            will be issued if the code size exceeds the given"
+        << " amount. The\n"
+        << "            default is "
+        << (DefaultCodeSizeWarningRatio * 100) << "%.\n";
 }
 
 static int main1(int argc, char **argv);
@@ -123,6 +133,7 @@ static int main1(int argc, char **argv)
     // Process command line options.
     bool quiet = false, reportVersion = false;
     string outputBaseName;
+    double codeSizeWarningRatio = DefaultCodeSizeWarningRatio;
     for (; argc >= 2; argc--, argv++)
     {
         string arg1 = argv[1];
@@ -145,6 +156,12 @@ static int main1(int argc, char **argv)
         }
         else if (option == "o")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             outputBaseName = (++argv)[1];
             argc--;
         }
@@ -152,6 +169,27 @@ static int main1(int argc, char **argv)
             quiet = true;
         else if (option == "v")
             reportVersion = true;
+        else if (option == "w")
+        {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
+            string value = (++argv)[1];
+            argc--;
+            char *p;
+            double percentage = strtod(value.c_str(), &p);
+            if (*p != 0 || percentage < 0 || percentage > 100)
+            {
+                cerr
+                    << "Invalid code size warning level: " << value
+                    << " (must be a number between 0 and 100)" << endl;
+                return 1;
+            }
+            codeSizeWarningRatio = percentage * 0.01;
+        }
         else
         {
             cerr << "Invalid option: " << arg1 << endl;
@@ -531,6 +569,23 @@ static int main1(int argc, char **argv)
         cout
             << executableFileName << ": "
             << executableByteCount << " bytes" << endl;
+
+        // Warn for executables nearing maximum size.
+        double codeSizeRatio =
+            (double)executable.FinalCodeSize() / executable.MaxCodeSize;
+        if (codeSizeRatio > codeSizeWarningRatio)
+        {
+            auto oldFlags = cout.flags();
+            auto oldPrecision = cout.precision();
+            cout
+                << "WARNING: Code size is at "
+                << fixed << setprecision(1) << (codeSizeRatio * 100)
+                << "% of maximum: "
+                << (executable.MaxCodeSize - executable.FinalCodeSize())
+                << " bytes remaining" << endl;
+            cout.flags(oldFlags);
+            cout.precision(oldPrecision);
+        }
     }
 
     return 0;

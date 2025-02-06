@@ -229,7 +229,9 @@ int main(int argc, char **argv)
             {
                 if (value < 0)
                 {
-                    cerr << "Invalid value for " << arg << endl;
+                    cerr
+                        << "Invalid value for " << arg
+                        << ": " << value << endl;
                     break;
                 }
                 auto pc = static_cast<uint32_t>(value);

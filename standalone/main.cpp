@@ -171,43 +171,109 @@ int main(int argc, char **argv)
         }
         else if (option == "c")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             string value = (++argv)[1];
             argc--;
-            codeByteCount = static_cast<size_t>(atoi(value.c_str()));
+            char *p;
+            codeByteCount = static_cast<size_t>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0)
+            {
+                cerr << "Invalid code size: " << value << endl;
+                return 1;
+            }
         }
         else if (option == "d")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             string value = (++argv)[1];
             argc--;
-            dataEntryCount = static_cast<size_t>(atoi(value.c_str()));
+            char *p;
+            dataEntryCount = static_cast<size_t>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0)
+            {
+                cerr << "Invalid data entry count: " << value << endl;
+                return 1;
+            }
         }
         else if (option == "p")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             string value = (++argv)[1];
             argc--;
-            codePageByteCount = static_cast<size_t>(atoi(value.c_str()));
+            char *p;
+            codePageByteCount = static_cast<size_t>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0)
+            {
+                cerr << "Invalid code page size: " << value << endl;
+                return 1;
+            }
         }
         #ifdef ASP_DEBUG
         else if (option == "n")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             string value = (++argv)[1];
             argc--;
-            stepCountLimit = static_cast<unsigned>(atoi(value.c_str()));
+            char *p;
+            stepCountLimit = static_cast<unsigned>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0)
+            {
+                cerr << "Invalid step count: " << value << endl;
+                return 1;
+            }
         }
         else if (option == "t")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             traceFileName = (++argv)[1];
             argc--;
             traceFileDescriptor = 0;
         }
         else if (option == "T")
         {
-            string value = (++argv)[1];
-            int fd = atoi(value.c_str());
-            argc--;
-            if (fd != 1 && fd != 2)
+            if (argc <= 2)
             {
-                cerr << "Invalid trace file descriptor " << value << endl;
+                Usage();
+                return 1;
+            }
+
+            string value = (++argv)[1];
+            argc--;
+            char *p;
+            int fd = static_cast<int>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0 || (fd != 1 && fd != 2))
+            {
+                cerr << "Invalid trace file descriptor: " << value << endl;
                 return 1;
             }
             traceFileDescriptor = fd;
@@ -215,18 +281,32 @@ int main(int argc, char **argv)
         }
         else if (option == "u")
         {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
             dumpFileName = (++argv)[1];
             argc--;
             dumpFileDescriptor = 0;
         }
         else if (option == "U")
         {
-            string value = (++argv)[1];
-            int fd = atoi(value.c_str());
-            argc--;
-            if (fd != 1 && fd != 2)
+            if (argc <= 2)
             {
-                cerr << "Invalid dump file descriptor " << value << endl;
+                Usage();
+                return 1;
+            }
+
+            string value = (++argv)[1];
+            argc--;
+            char *p;
+            int fd = static_cast<int>
+                (strtol(value.c_str(), &p, 0));
+            if (*p != 0 || (fd != 1 && fd != 2))
+            {
+                cerr << "Invalid dump file descriptor: " << value << endl;
                 return 1;
             }
             dumpFileDescriptor = fd;
