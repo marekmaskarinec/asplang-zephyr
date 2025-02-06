@@ -14,7 +14,7 @@ Version 1.2.3.4 (compiler 1.2.1.2, engine 1.2.2.4):
   - Added a warning when script executables reach a specified percentage of the
     maximum code size, the default being 80%.
 - Standalone application:
-  - Added a missing header to the main module.
+  - Included a missing header in the main module.
 - General:
   - Made command line option processing more robust for all commands.
 
