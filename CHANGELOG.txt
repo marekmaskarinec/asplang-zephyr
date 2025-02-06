@@ -7,6 +7,17 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.4 (compiler 1.2.1.2, engine 1.2.2.4):
+- Engine:
+  - Fixed a benign coding error in the API function AspIteratorErase.
+- Compiler:
+  - Added a warning when script executables reach a specified percentage of the
+    maximum code size, the default being 80%.
+- Standalone application:
+  - Added a missing header to the main module.
+- General:
+  - Made command line option processing more robust for all commands.
+
 Version 1.2.3.3 (compiler 1.2.1.1, engine 1.2.2.3):
 - Engine:
   - Fixed a regression introduced into API function AspStringAppend from
