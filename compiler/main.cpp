@@ -88,6 +88,23 @@ static void Usage()
     cerr
         << ":\n"
         << COMMAND_OPTION_PREFIXES[0]
+        << "c SIZE     Maximum code size in bytes. An error is raised if the"
+        << " executable's\n"
+        << "            code size exceeds the given value. The default (and"
+        << " maximum) is\n"
+        << "            " << Executable::MaxCodeSize << " (";
+    {
+        auto oldFlags = cerr.flags();
+        cerr << showbase << hex << Executable::MaxCodeSize;
+        cerr.flags(oldFlags);
+    }
+    cerr
+        << "). This value is also used in conjunction with\n"
+        << "            the code size warning level ("
+        << COMMAND_OPTION_PREFIXES[0] << "w option).\n"
+        << COMMAND_OPTION_PREFIXES[0]
+        << "h          Print usage information and exit.\n"
+        << COMMAND_OPTION_PREFIXES[0]
         << "o FILE     Write outputs to FILE.* instead of basing file names"
         << " on the SCRIPT\n"
         << "            file name. If FILE ends with .aspe, its base name is"
@@ -97,18 +114,17 @@ static void Usage()
         << "            given by FILE. In this case, the directory must"
         << " already exist.\n"
         << COMMAND_OPTION_PREFIXES[0]
-        << "h          Print usage information and exit.\n"
-        << COMMAND_OPTION_PREFIXES[0]
         << "q          Quiet. Don't output usual compiler information.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "v          Print version information and exit.\n"
         << COMMAND_OPTION_PREFIXES[0]
         << "w PERCENT  Code size warning level, as a percentage of the"
-        << " maximum. A warning\n"
-        << "            will be issued if the code size exceeds the given"
-        << " amount. The\n"
-        << "            default is "
-        << (DefaultCodeSizeWarningRatio * 100) << "%.\n";
+        << " maximum (i.e., the\n"
+        << "            value given by the " << COMMAND_OPTION_PREFIXES[0]
+        << "c option or its default). A warning will be\n"
+        << "            issued if the code size exceeds the given amount. The"
+        << " default level\n"
+        << "            is " << (DefaultCodeSizeWarningRatio * 100) << "%.\n";
 }
 
 static int main1(int argc, char **argv);
@@ -133,6 +149,7 @@ static int main1(int argc, char **argv)
     // Process command line options.
     bool quiet = false, reportVersion = false;
     string outputBaseName;
+    uint32_t maxCodeSize = Executable::MaxCodeSize;
     double codeSizeWarningRatio = DefaultCodeSizeWarningRatio;
     for (; argc >= 2; argc--, argv++)
     {
@@ -153,6 +170,32 @@ static int main1(int argc, char **argv)
         {
             Usage();
             return 0;
+        }
+        else if (option == "c")
+        {
+            if (argc <= 2)
+            {
+                Usage();
+                return 1;
+            }
+
+            string value = (++argv)[1];
+            argc--;
+            char *p;
+            long size = strtol(value.c_str(), &p, 0);
+            if (*p != 0 || size <= 0 || size > Executable::MaxCodeSize)
+            {
+                auto oldFlags = cerr.flags();
+                cerr
+                    << "Invalid max code size: " << value
+                    << " (must be a positive integer up to "
+                    << Executable::MaxCodeSize
+                    << ", i.e., " << showbase << hex << Executable::MaxCodeSize
+                    << ')' << endl;
+                cerr.flags(oldFlags);
+                return 1;
+            }
+            maxCodeSize = static_cast<uint32_t>(size);
         }
         else if (option == "o")
         {
@@ -263,8 +306,8 @@ static int main1(int argc, char **argv)
         }
     }
 
-    // If the application specification is not defined at this point, issue an
-    // error and exit.
+    // If the source file is not defined at this point, issue an error and
+    // exit.
     if (mainModuleFileName.empty())
     {
         cerr << "Error: Source file not specified" << endl;
@@ -511,8 +554,17 @@ static int main1(int argc, char **argv)
     }
 
     compiler.Finalize();
-    if (errorDetected)
+    auto finalCodeSize = executable.FinalCodeSize();
+    if (errorDetected || finalCodeSize > maxCodeSize)
     {
+        if (finalCodeSize > maxCodeSize)
+        {
+            cerr
+                << "ERROR: Code size exceeds the maximum: "
+                << finalCodeSize << " vs. max " << maxCodeSize << " bytes"
+                << endl;
+        }
+
         cerr << "Ended in ERROR" << endl;
 
         // Remove output files.
@@ -571,9 +623,8 @@ static int main1(int argc, char **argv)
             << executableByteCount << " bytes" << endl;
 
         // Warn for executables nearing maximum size.
-        double codeSizeRatio =
-            (double)executable.FinalCodeSize() / executable.MaxCodeSize;
-        if (codeSizeRatio > codeSizeWarningRatio)
+        double codeSizeRatio = (double)finalCodeSize / maxCodeSize;
+        if (codeSizeRatio >= codeSizeWarningRatio)
         {
             auto oldFlags = cout.flags();
             auto oldPrecision = cout.precision();
@@ -581,7 +632,7 @@ static int main1(int argc, char **argv)
                 << "WARNING: Code size is at "
                 << fixed << setprecision(1) << (codeSizeRatio * 100)
                 << "% of maximum: "
-                << (executable.MaxCodeSize - executable.FinalCodeSize())
+                << (maxCodeSize - executable.FinalCodeSize())
                 << " bytes remaining" << endl;
             cout.flags(oldFlags);
             cout.precision(oldPrecision);
