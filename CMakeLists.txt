@@ -49,25 +49,33 @@ if(BUILD_TEST_TARGETS)
     set(BUILD_SHARED_LIBS FALSE)
 endif()
 
+# System definitions.
 if(WIN32)
     set(PATH_NAME_SEPARATOR [[;]])
     set(C_PATH_NAME_SEPARATOR [['\\;']])
     set(C_FILE_NAME_SEPARATORS [["\\/"]])
     set(C_COMMAND_OPTION_PREFIXES [["-/"]])
-
-    if(MSVC)
-        add_compile_options(/D_CRT_SECURE_NO_WARNINGS)
-        if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-            # Unsupported option when using clang-cl
-            add_compile_options(/Zc:preprocessor)
-            add_compile_options(/wd4554)
-        endif()
-    endif()
 else()
     set(PATH_NAME_SEPARATOR :)
     set(C_PATH_NAME_SEPARATOR ':')
     set(C_FILE_NAME_SEPARATORS [["/"]])
     set(C_COMMAND_OPTION_PREFIXES [["-"]])
+endif()
+
+# Compile options.
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(
+        -pedantic -Wall -Werror
+        -Wno-parentheses -Wno-switch
+        -Wwrite-strings -Wpointer-arith
+        )
+endif()
+if(WIN32 AND MSVC)
+    add_compile_options(/D_CRT_SECURE_NO_WARNINGS)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    # Unsupported options when using clang-cl
+    add_compile_options(/Zc:preprocessor /wd4554)
 endif()
 
 add_subdirectory(engine)
