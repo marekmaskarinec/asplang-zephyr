@@ -49,6 +49,11 @@ add_executable(asps
     functions-sleep.cpp
     )
 
+if(ENABLE_DEBUG)
+    set_property(TARGET asps
+        PROPERTY OUTPUT_NAME asps-d
+        )
+endif()
 set_property(TARGET asps
     PROPERTY VERSION ${ABI_VERSION}
     )

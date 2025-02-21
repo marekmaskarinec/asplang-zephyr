@@ -67,6 +67,11 @@ if(BUILD_FOR_TARGET)
         $<$<BOOL:${ENABLE_DEBUG}>:debug.c>
         )
 
+    if(ENABLE_DEBUG)
+        set_property(TARGET aspe
+            PROPERTY OUTPUT_NAME aspe-d
+            )
+    endif()
     set_property(TARGET aspe
         PROPERTY VERSION ${ABI_VERSION}
         )
@@ -96,6 +101,11 @@ if(BUILD_FOR_TARGET)
         lib-math.c
         )
 
+    if(ENABLE_DEBUG)
+        set_property(TARGET aspm
+            PROPERTY OUTPUT_NAME aspm-d
+            )
+    endif()
     set_property(TARGET aspm
         PROPERTY VERSION ${ABI_VERSION}
         )
