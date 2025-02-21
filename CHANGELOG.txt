@@ -7,6 +7,10 @@ chronological order.
 Changes
 -------
 
+Version 1.2.3.6 (compiler 1.2.1.3, engine 1.2.2.5):
+- Engine:
+  - Added API function AspDataAddress, available only in debug builds.
+
 Version 1.2.3.5 (compiler 1.2.1.3, engine 1.2.2.4):
 - Compiler:
   - Added an option to specify the maximum code size in bytes. If the size of

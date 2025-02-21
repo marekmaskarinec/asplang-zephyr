@@ -12,6 +12,15 @@
 static void DumpData(const AspEngine *, FILE *);
 static void DumpDataEntry(uint32_t index, const AspDataEntry *, FILE *);
 
+uint32_t AspDataAddress(const AspEngine *engine, const AspDataEntry *entry)
+{
+    return
+        entry == 0 ||
+        entry < engine->data ||
+        entry >= engine->data + engine->dataEndIndex ?
+        0xFFFFFFFF : AspIndex(engine, entry);
+}
+
 uint32_t AspUseCount(const AspDataEntry *entry)
 {
     return entry == 0 ? 0 : AspDataGetUseCount(entry);
