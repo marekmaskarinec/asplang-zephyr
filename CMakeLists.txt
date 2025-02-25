@@ -65,7 +65,7 @@ endif()
 # Compile options.
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(
-        -pedantic -Wall -Werror
+        -pedantic -Werror
         -Wno-parentheses -Wno-switch
         -Wwrite-strings -Wpointer-arith
         )

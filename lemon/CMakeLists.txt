@@ -12,5 +12,10 @@ set(CMAKE_C_STANDARD_REQUIRED True)
 add_executable(lemon lemon.c)
 
 # Remove top-level compile options since they are too strict for lemon.
-set_property(TARGET lemon
-    PROPERTY COMPILE_OPTIONS "")
+if(WIN32 AND MSVC)
+    set_property(TARGET lemon
+        PROPERTY COMPILE_OPTIONS "/D_CRT_SECURE_NO_WARNINGS")
+else()
+    set_property(TARGET lemon
+        PROPERTY COMPILE_OPTIONS "")
+endif()
