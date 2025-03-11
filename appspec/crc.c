@@ -22,7 +22,8 @@
 #define ACCESS(v) (v)
 #endif
 #define ASSIGN_N(_1, _2, _3, arg, ...) arg
-#define ASSIGN(...) ASSIGN_N(__VA_ARGS__, ASSIGN_PREFIX, ASSIGN_EQ)(__VA_ARGS__)
+#define ASSIGN(...) ASSIGN_N(__VA_ARGS__, ASSIGN_PREFIX, ASSIGN_EQ, ) \
+    (__VA_ARGS__)
 
 static crc_arg_t reflect(crc_arg_t value, unsigned bit_count);
 
