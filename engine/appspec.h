@@ -11,6 +11,7 @@ extern "C" {
 
 typedef enum AppSpecPrefix
 {
+    AppSpecPrefix_MaxFunctionParameterCount = 0xFD,
     AppSpecPrefix_Symbol = 0xFE,
     AppSpecPrefix_Variable = 0xFF,
 

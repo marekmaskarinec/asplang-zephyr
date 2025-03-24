@@ -8,6 +8,7 @@
 #include "appspec.h"
 #include "data.h"
 #include "crc.h"
+#include <sstream>
 #include <iomanip>
 
 using namespace std;
@@ -294,6 +295,17 @@ void Generator::WriteApplicationCode(ostream &os) const
             auto &parameters = functionDefinition->Parameters();
 
             auto parameterCount = parameters.ParametersSize();
+            if (parameterCount >
+                static_cast<size_t>(AppSpecPrefix_MaxFunctionParameterCount))
+            {
+                ostringstream oss;
+                oss
+                    << "Function '" << functionDefinition->Name()
+                    << "' has too many parameters ("
+                    << parameterCount << " vs. max "
+                    << AppSpecPrefix_MaxFunctionParameterCount << ')';
+                throw oss.str();
+            }
             WriteStringEscapedHex(os, static_cast<uint8_t>(parameterCount));
             specByteCount++;
 
