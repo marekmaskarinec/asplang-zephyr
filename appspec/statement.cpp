@@ -6,8 +6,14 @@
 
 using namespace std;
 
+Import::Import(const Token &moduleNameToken) :
+    NonTerminal(moduleNameToken),
+    moduleName(moduleNameToken.s)
+{
+}
+
 Assignment::Assignment(const Token &nameToken, Literal *value) :
-    name(nameToken.s),
+    NonTerminal(nameToken),
     value(value)
 {
 }
@@ -55,7 +61,6 @@ FunctionDefinition::FunctionDefinition
     (const Token &nameToken, bool isLibraryInterface,
      const Token &internalNameToken, ParameterList *parameterList) :
     NonTerminal(nameToken),
-    name(nameToken.s),
     isLibraryInterface(isLibraryInterface),
     internalName(internalNameToken.s),
     parameterList(parameterList)

@@ -14,7 +14,7 @@ class SymbolTable
     public:
 
         // Constructor.
-        SymbolTable();
+        explicit SymbolTable(bool reserveSystemSymbols = true);
 
         // Symbol fetch method.
         // If the name is empty, get a new symbol for a temporary.

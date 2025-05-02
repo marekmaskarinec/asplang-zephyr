@@ -5,7 +5,6 @@
 #include "generator.h"
 #include "app.h"
 #include "function.hpp"
-#include "symbol.hpp"
 #include "symbols.h"
 #include "grammar.hpp"
 #include <iostream>
@@ -16,13 +15,16 @@ using namespace std;
 
 Generator::Generator
     (ostream &errorStream,
-     SymbolTable &symbolTable,
      const string &baseFileName) :
     errorStream(errorStream),
-    symbolTable(symbolTable),
+    symbolTable(true),
+    moduleIdTable(false),
     baseFileName(baseFileName),
     baseName(baseFileName)
 {
+    // Reserve module ID zero for the system module.
+    moduleIdTable.Symbol(AspSystemModuleName);
+
     // Deal with invalid variable name characters in the file name.
     for (string::iterator si = baseName.begin();
          si != baseName.end();
@@ -32,12 +34,12 @@ Generator::Generator
         if (!isalnum(c) && c != '_')
             *si = '_';
     }
-}
 
-Generator::~Generator()
-{
-    for (auto &definition: definitions)
-        delete definition.second;
+    // Create a space for the system module. Note that an empty string is used
+    // as the key rather than the name 'sys' so that this will be the first
+    // entry, and therefore be written first to the compiler spec.
+    currentModuleDefinitions = &definitions.emplace
+        ("", map<string, shared_ptr<NonTerminal> >()).first->second;
 }
 
 unsigned Generator::ErrorCount() const
@@ -47,12 +49,15 @@ unsigned Generator::ErrorCount() const
 
 void Generator::CurrentSource
     (const string &sourceFileName,
+     const string &moduleName,
      bool newFile, bool isLibrary,
      const SourceLocation &sourceLocation)
 {
     this->newFile = newFile;
     this->isLibrary = isLibrary;
     currentSourceFileName = sourceFileName;
+    currentModuleName = moduleName;
+    currentModuleDefinitions = &definitions.find(moduleName)->second;
     currentSourceLocation = sourceLocation;
 }
 
@@ -64,6 +69,11 @@ bool Generator::IsLibrary() const
 const string &Generator::CurrentSourceFileName() const
 {
     return currentSourceFileName;
+}
+
+const string &Generator::CurrentModuleName() const
+{
+    return currentModuleName;
 }
 
 SourceLocation Generator::CurrentSourceLocation() const
@@ -139,10 +149,84 @@ DEFINE_ACTION
 {
     newFile = false;
 
+    // Switch to the new source file.
     currentSourceFileName = includeNameToken->s + ".asps";
     currentSourceLocation = includeNameToken->sourceLocation;
 
     delete includeNameToken;
+
+    return nullptr;
+}
+
+DEFINE_ACTION
+    (ImportModule, NonTerminal *,
+     Token *, moduleNameToken, Token *, asNameToken)
+{
+    newFile = false;
+
+    if (CheckReservedNameError(*asNameToken))
+        return nullptr;
+
+    // Ensure the import name has not been previously associated with a
+    // different module.
+    auto findImportIter = imports.find(asNameToken->s);
+    if (findImportIter != imports.end() &&
+        moduleNameToken->s != findImportIter->second)
+    {
+        ostringstream oss;
+        oss
+            << "Import module '" << findImportIter->second
+            << "' previously imported as '" << asNameToken->s
+            << "'; cannot also import module '" << moduleNameToken->s
+            << "' as '" << asNameToken->s << '\'';
+        ReportError(oss.str(), *asNameToken);
+        return nullptr;
+    }
+
+    // Replace any previous definition having the same name with this
+    // latter one.
+    auto findModuleIter = currentModuleDefinitions->find(asNameToken->s);
+    if (findModuleIter != currentModuleDefinitions->end())
+    {
+        ostringstream oss;
+        oss << asNameToken->s << " redefined";
+        ReportWarning(oss.str(), *asNameToken);
+        currentModuleDefinitions->erase(findModuleIter);
+        imports.erase(asNameToken->s);
+    }
+
+    // Add the import definition.
+    currentModuleDefinitions->emplace
+        (asNameToken->s, new Import(*moduleNameToken));
+    imports.emplace(asNameToken->s, moduleNameToken->s);
+    checkValueComputed = false;
+
+    // Set the required app spec formats to support app modules.
+    if (compilerAppSpecVersion < 2u)
+        compilerAppSpecVersion = 2u;
+    if (engineAppSpecVersion < 1u)
+        engineAppSpecVersion = 1u;
+
+    // Check if the module has been imported elsewhere.
+    auto findModuleDefinitionIter = definitions.find(moduleNameToken->s);
+    if (findModuleDefinitionIter == definitions.end())
+    {
+        // Switch to the new source file.
+        currentSourceFileName = moduleNameToken->s + ".asps";
+        currentSourceLocation = moduleNameToken->sourceLocation;
+
+        // Switch to the new module import.
+        currentModuleName = moduleNameToken->s;
+        currentModuleDefinitions = &definitions.emplace
+            (currentModuleName, map<string, shared_ptr<NonTerminal> >())
+            .first->second;
+    }
+
+    currentSourceLocation = asNameToken->sourceLocation;
+
+    if (asNameToken != moduleNameToken)
+        delete asNameToken;
+    delete moduleNameToken;
 
     return nullptr;
 }
@@ -153,20 +237,22 @@ DEFINE_ACTION
 {
     newFile = false;
 
-    if (CheckReservedNameError(nameToken->s))
+    if (CheckReservedNameError(*nameToken))
         return nullptr;
 
     // Replace any previous definition having the same name with this
     // latter one.
-    auto findIter = definitions.find(nameToken->s);
-    if (findIter != definitions.end())
+    auto findIter = currentModuleDefinitions->find(nameToken->s);
+    if (findIter != currentModuleDefinitions->end())
     {
-        cout << "Warning: " << nameToken->s << " redefined" << endl;
-        delete findIter->second;
-        definitions.erase(findIter);
+        ostringstream oss;
+        oss << nameToken->s << " redefined";
+        ReportWarning(oss.str(), *nameToken);
+        currentModuleDefinitions->erase(findIter);
     }
 
-    definitions.emplace
+    // Add the assignment definition.
+    currentModuleDefinitions->emplace
         (nameToken->s, new Assignment(*nameToken, value));
     checkValueComputed = false;
 
@@ -184,7 +270,7 @@ DEFINE_ACTION
 {
     newFile = false;
 
-    if (CheckReservedNameError(nameToken->s))
+    if (CheckReservedNameError(*nameToken))
         return nullptr;
 
     // Ensure the validity of the order of parameter types.
@@ -216,7 +302,7 @@ DEFINE_ACTION
         }
         if (!typeValid)
         {
-            ReportError("Internal error; unknown parameter type");
+            ReportError("Internal error; unknown parameter type", parameter);
             break;
         }
 
@@ -226,19 +312,25 @@ DEFINE_ACTION
             ReportError(error, parameter);
     }
 
+    auto parameterCount = parameterList->ParametersSize();
+    if (parameterCount > AppSpecPrefix_MaxFunctionParameterCount &&
+        engineAppSpecVersion < 1u)
+        engineAppSpecVersion = 1u;
+
     // Replace any previous definition having the same name with this
     // latter one.
-    auto findIter = definitions.find(nameToken->s);
-    if (findIter != definitions.end())
+    auto findIter = currentModuleDefinitions->find(nameToken->s);
+    if (findIter != currentModuleDefinitions->end())
     {
-        cout << "Warning: " << nameToken->s << " redefined" << endl;
-        delete findIter->second;
-        definitions.erase(findIter);
+        ostringstream oss;
+        oss << nameToken->s << " redefined";
+        ReportWarning(oss.str(), *nameToken);
+        currentModuleDefinitions->erase(findIter);
     }
 
-    definitions.emplace
-        (nameToken->s,
-         new FunctionDefinition
+    // Add the function definition.
+    currentModuleDefinitions->emplace
+        (nameToken->s, new FunctionDefinition
             (*nameToken, isLibrary,
              *internalNameToken, parameterList));
     checkValueComputed = false;
@@ -260,17 +352,16 @@ DEFINE_ACTION
     {
         const auto &name = *iter;
 
-        auto findIter = definitions.find(name);
-        if (findIter == definitions.end())
+        auto findIter = currentModuleDefinitions->find(name);
+        if (findIter == currentModuleDefinitions->end())
         {
             ostringstream oss;
             oss << "Cannot delete '" << name << '\'' << "; not found";
-            ReportError(oss.str());
+            ReportError(oss.str(), *nameList);
             continue;
         }
 
-        delete findIter->second;
-        definitions.erase(findIter);
+        currentModuleDefinitions->erase(findIter);
     }
 
     return nullptr;
@@ -352,7 +443,7 @@ DEFINE_ACTION
     }
     catch (const string &e)
     {
-        ReportError(e);
+        ReportError(e, *token);
     }
 
     return nullptr;
@@ -368,43 +459,73 @@ DEFINE_UTIL(FreeToken, void, Token *, token)
     delete token;
 }
 
+DEFINE_UTIL(ReportWarning, void, const char *, error)
+{
+     ReportWarning(string(error));
+}
+
 DEFINE_UTIL(ReportError, void, const char *, error)
 {
      ReportError(string(error));
 }
 
-bool Generator::CheckReservedNameError(const string &name)
+bool Generator::CheckReservedNameError(const Token &nameToken)
 {
-    if (AspIsNameReserved(name.c_str()))
+    if (AspIsNameReserved(nameToken.s.c_str()))
     {
         ostringstream oss;
-        oss << "Cannot redefine reserved name '" << name << '\'';
-        ReportError(oss.str());
+        oss << "Cannot redefine reserved name '" << nameToken.s << '\'';
+        ReportError(oss.str(), nameToken);
         return true;
     }
 
     return false;
 }
 
-void Generator::ReportError(const string &error)
+void Generator::ReportWarning(const string &message) const
 {
-    ReportError(error, currentSourceLocation);
+    ReportWarning(message, currentSourceLocation);
+}
+
+void Generator::ReportWarning
+    (const string &message, const SourceElement &sourceElement) const
+{
+    ReportWarning(message, sourceElement.sourceLocation);
+}
+
+void Generator::ReportWarning
+    (const string &message, const SourceLocation &sourceLocation) const
+{
+    ReportMessage(message, sourceLocation, false);
+}
+
+void Generator::ReportError(const string &message)
+{
+    ReportError(message, currentSourceLocation);
 }
 
 void Generator::ReportError
-    (const string &error, const SourceElement &sourceElement)
+    (const string &message, const SourceElement &sourceElement)
 {
-    ReportError(error, sourceElement.sourceLocation);
+    ReportError(message, sourceElement.sourceLocation);
 }
 
 void Generator::ReportError
-    (const string &error, const SourceLocation &sourceLocation)
+    (const string &message, const SourceLocation &sourceLocation)
+{
+    ReportMessage(message, sourceLocation, true);
+    errorCount++;
+}
+
+void Generator::ReportMessage
+    (const string &message, const SourceLocation &sourceLocation, bool error)
+    const
 {
     if (sourceLocation.Defined())
         errorStream
             << sourceLocation.fileName << ':'
             << sourceLocation.line << ':'
             << sourceLocation.column << ": ";
-    errorStream << "Error: " << error << endl;
-    errorCount++;
+    errorStream
+        << (error ? "Error" : "Warning") << ": " << message << endl;
 }

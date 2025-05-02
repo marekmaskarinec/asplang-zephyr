@@ -11,6 +11,22 @@
 #include <list>
 #include <string>
 
+class Import : public NonTerminal
+{
+    public:
+
+        explicit Import(const Token &moduleName);
+
+        const std::string &ModuleName() const
+        {
+            return moduleName;
+        }
+
+    private:
+
+        std::string moduleName;
+};
+
 class Assignment : public NonTerminal
 {
     public:
@@ -18,10 +34,6 @@ class Assignment : public NonTerminal
         Assignment(const Token &name, Literal *);
         ~Assignment() override;
 
-        std::string Name() const
-        {
-            return name;
-        }
         Literal *Value() const
         {
             return value;
@@ -29,7 +41,6 @@ class Assignment : public NonTerminal
 
     private:
 
-        std::string name;
         Literal *value;
 };
 
@@ -48,7 +59,7 @@ class Parameter : public NonTerminal
         explicit Parameter(const Token &name, Type = Type::Positional);
         ~Parameter() override;
 
-        std::string Name() const
+        const std::string &Name() const
         {
             return name;
         }
@@ -120,10 +131,6 @@ class FunctionDefinition : public NonTerminal
              const Token &internalName, ParameterList *);
         ~FunctionDefinition() override;
 
-        const std::string &Name() const
-        {
-            return name;
-        }
         bool IsLibraryInterface() const
         {
             return isLibraryInterface;
@@ -139,7 +146,6 @@ class FunctionDefinition : public NonTerminal
 
     private:
 
-        std::string name;
         bool isLibraryInterface;
         std::string internalName;
         ParameterList *parameterList;

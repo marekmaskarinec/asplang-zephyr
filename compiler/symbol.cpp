@@ -8,24 +8,43 @@
 
 using namespace std;
 
-SymbolTable::SymbolTable()
+SymbolTable::SymbolTable(bool reserveSystemSymbols)
 {
-    // Reserve symbols used by the system module.
-    Symbol(AspSystemModuleName);
-    Symbol(AspSystemArgumentsName);
-    Symbol(AspSystemMainModuleName);
+    // Reserve symbols used by the system if applicable.
+    if (reserveSystemSymbols)
+    {
+        Symbol(AspSystemModuleName);
+        Symbol(AspSystemArgumentsName);
+        Symbol(AspSystemMainModuleName);
+    }
 }
 
 int32_t SymbolTable::Symbol(const string &name)
 {
     // For a temporary, return a new negative symbol.
     if (name.empty())
-        return nextUnnamedSymbol--;
+    {
+        if (nextUnnamedSymbol == 0)
+            throw string("Maximum number of temporary symbols exceeded");
+        auto result = nextUnnamedSymbol;
+        if (nextUnnamedSymbol == INT32_MIN)
+            nextUnnamedSymbol = 0;
+        else
+            nextUnnamedSymbol--;
+        return result;
+    }
 
     // Return a unique symbol for the given name.
+    if (nextNamedSymbol == 0 && !symbolsByName.empty())
+        throw string("Maximum number of name symbols exceeded");
     auto result = symbolsByName.insert(make_pair(name, nextNamedSymbol));
     if (result.second)
-        nextNamedSymbol++;
+    {
+        if (nextNamedSymbol == INT32_MAX)
+            nextNamedSymbol = 0;
+        else
+            nextNamedSymbol++;
+    }
     return result.first->second;
 }
 

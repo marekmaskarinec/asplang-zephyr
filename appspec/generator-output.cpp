@@ -3,17 +3,15 @@
 //
 
 #include "generator.h"
-#include "symbol.hpp"
 #include "symbols.h"
 #include "appspec.h"
 #include "data.h"
 #include "crc.h"
+#include <set>
 #include <sstream>
 #include <iomanip>
 
 using namespace std;
-
-static const string AppSpecVersion = "\x01";
 
 static void WriteValue(ostream &, unsigned *specByteCount, const Literal &);
 static void ContributeValue
@@ -53,46 +51,68 @@ static void WriteStringEscapedHex(ostream &os, T value)
     }
 }
 
-void Generator::WriteCompilerSpec(ostream &os) const
+void Generator::WriteCompilerSpec(ostream &os)
 {
     // Write the specification's header, including check value.
     os.write("AspS", 4);
-    os.write(AppSpecVersion.c_str(), AppSpecVersion.size());
+    os.put(static_cast<char>(compilerAppSpecVersion));
     Write(os, CheckValue());
+
+    // If applicable, assign symbols to import names, followed by a separator
+    // to separate them from the remaining symbol names.
+    for (const auto &importEntry: imports)
+    {
+        const auto &importName = importEntry.first;
+
+        if (symbolTable.IsDefined(importName))
+            continue;
+
+        symbolTable.Symbol(importName);
+        os << importName << '\n';
+    }
+    if (!imports.empty())
+        os << '\n';
 
     // Assign symbols, to variable and function names first, then to parameter
     // names, writing each name only once, in order of assigned symbol.
-    for (const auto &definitionEntry: definitions)
+    for (const auto &definitionMap: definitions)
     {
-        const auto &name = definitionEntry.first;
-
-        bool wasDefined = symbolTable.IsDefined(name);
-        symbolTable.Symbol(name);
-
-        if (!wasDefined)
-            os << name << '\n';
-    }
-    for (const auto &definitionEntry: definitions)
-    {
-        const auto functionDefinition =
-            dynamic_cast<const FunctionDefinition *>(definitionEntry.second);
-        if (functionDefinition == nullptr)
-            continue;
-
-        const auto &parameters = functionDefinition->Parameters();
-
-        for (auto parameterIter = parameters.ParametersBegin();
-             parameterIter != parameters.ParametersEnd();
-             parameterIter++)
+        for (const auto &definitionEntry: definitionMap.second)
         {
-            const auto &parameter = **parameterIter;
-            const auto &parameterName = parameter.Name();
+            const auto &name = definitionEntry.first;
 
-            bool wasDefined = symbolTable.IsDefined(parameterName);
-            symbolTable.Symbol(parameterName);
+            if (symbolTable.IsDefined(name))
+                continue;
 
-            if (!wasDefined)
+            symbolTable.Symbol(name);
+            os << name << '\n';
+        }
+    }
+    for (const auto &definitionMap: definitions)
+    {
+        for (const auto &definitionEntry: definitionMap.second)
+        {
+            const auto &definition = definitionEntry.second.get();
+            const auto functionDefinition =
+                dynamic_cast<const FunctionDefinition *>(definition);
+            if (functionDefinition == nullptr)
+                continue;
+
+            const auto &parameters = functionDefinition->Parameters();
+
+            for (auto parameterIter = parameters.ParametersBegin();
+                 parameterIter != parameters.ParametersEnd();
+                 parameterIter++)
+            {
+                const auto &parameter = **parameterIter;
+                const auto &parameterName = parameter.Name();
+
+                if (symbolTable.IsDefined(parameterName))
+                    continue;
+
+                symbolTable.Symbol(parameterName);
                 os << parameterName << '\n';
+            }
         }
     }
 }
@@ -122,47 +142,58 @@ void Generator::WriteApplicationHeader(ostream &os) const
     }
 
     // Write application function declarations.
-    for (const auto &definitionEntry: definitions)
+    set<string> functionInternalNames;
+    for (const auto &definitionMap: definitions)
     {
-        const auto &definition = definitionEntry.second;
-        const auto functionDefinition =
-            dynamic_cast<const FunctionDefinition *>(definition);
-        if (functionDefinition == nullptr)
-            continue;
-
-        os << '\n';
-        if (functionDefinition->IsLibraryInterface())
-            os << "ASP_LIB_API ";
-        os
-            << "AspRunResult " << functionDefinition->InternalName() << "\n"
-               "    (AspEngine *,";
-
-        const auto &parameters = functionDefinition->Parameters();
-
-        if (!parameters.ParametersEmpty())
-            os << "\n";
-
-        for (auto parameterIter = parameters.ParametersBegin();
-             parameterIter != parameters.ParametersEnd();
-             parameterIter++)
+        for (const auto &definitionEntry: definitionMap.second)
         {
-            const auto &parameter = **parameterIter;
+            const auto &definition = definitionEntry.second.get();
+            const auto functionDefinition =
+                dynamic_cast<const FunctionDefinition *>(definition);
+            if (functionDefinition == nullptr)
+                continue;
+            const auto &functionInternalName =
+                functionDefinition->InternalName();
 
-            os << "     AspDataEntry *" << parameter.Name() << ',';
-            if (parameter.IsGroup())
-                os
-                    << " /* "
-                    << (parameter.IsTupleGroup() ? "tuple" : "dictionary")
-                    << " group */";
+            // Prevent writting duplicate declarations.
+            auto fiter = functionInternalNames.find(functionInternalName);
+            if (fiter != functionInternalNames.end())
+                continue;
+
             os << '\n';
+            if (functionDefinition->IsLibraryInterface())
+                os << "ASP_LIB_API ";
+            os
+                << "AspRunResult " << functionDefinition->InternalName() << "\n"
+                   "    (AspEngine *,";
+
+            const auto &parameters = functionDefinition->Parameters();
+
+            if (!parameters.ParametersEmpty())
+                os << "\n";
+
+            for (auto parameterIter = parameters.ParametersBegin();
+                 parameterIter != parameters.ParametersEnd();
+                 parameterIter++)
+            {
+                const auto &parameter = **parameterIter;
+
+                os << "     AspDataEntry *_" << parameter.Name() << ',';
+                if (parameter.IsGroup())
+                    os
+                        << " /* "
+                        << (parameter.IsTupleGroup() ? "tuple" : "dictionary")
+                        << " group */";
+                os << '\n';
+            }
+
+            if (parameters.ParametersEmpty())
+                os << ' ';
+            else
+                os << "     ";
+
+            os << "AspDataEntry **returnValue);\n";
         }
-
-        if (parameters.ParametersEmpty())
-            os << ' ';
-        else
-            os << "     ";
-
-        os << "AspDataEntry **returnValue);\n";
     }
 
     os
@@ -175,139 +206,75 @@ void Generator::WriteApplicationHeader(ostream &os) const
 
 void Generator::WriteApplicationCode(ostream &os) const
 {
+    static string engineAppSpec1EngineVersion = "1.2.3.0";
+    static string engineAppSpec1EngineVersionHex = "0x01020300";
+    static string engineAppSpec1EngineVersionGoodCheck =
+        string("#if ASP_VERSION >= ") + engineAppSpec1EngineVersionHex;
+    static string engineAppSpec1EngineVersionBadCheck =
+        string("#if ASP_VERSION < ") + engineAppSpec1EngineVersionHex;
+
     os
         << "/*** AUTO-GENERATED; DO NOT EDIT ***/\n\n"
            "#include \"" << baseFileName << ".h\"\n"
            "#include <stdint.h>\n";
 
+    // Write a minimum engine version check if applicable.
+    if (engineAppSpecVersion >= 1u)
+    {
+        os
+            << "\n" << engineAppSpec1EngineVersionBadCheck << "\n"
+               "#error Asp engine must be version "
+            << engineAppSpec1EngineVersion << " or greater\n"
+            << "#endif\n";
+    }
+
     // Write the dispatch function.
     os
         << "\nstatic AspRunResult AspDispatch_" << baseName
-        << "\n    (AspEngine *engine, int32_t symbol, AspDataEntry *ns,\n"
-           "     AspDataEntry **returnValue)\n"
-           "{\n"
-           "    switch (symbol)\n"
+        << "\n    (AspEngine *engine,\n";
+    if (engineAppSpecVersion == 0)
+        os << "     " << engineAppSpec1EngineVersionGoodCheck << '\n';
+    os << "     int32_t moduleSymbol,";
+    if (engineAppSpecVersion == 0)
+        os << "\n     #endif\n    ";
+    os
+        << " int32_t functionSymbol,\n"
+           "     AspDataEntry *ns, AspDataEntry **returnValue)\n"
+           "{\n";
+    if (engineAppSpecVersion == 0)
+        os << "    " << engineAppSpec1EngineVersionGoodCheck << '\n';
+    os
+        << "    switch (moduleSymbol)\n"
            "    {\n";
-    for (const auto &definitionEntry: definitions)
+    for (const auto &definitionMap: definitions)
     {
-        const auto &definition = definitionEntry.second;
-        const auto functionDefinition =
-            dynamic_cast<const FunctionDefinition *>(definition);
-        if (functionDefinition == nullptr)
-            continue;
+        const auto &moduleName = definitionMap.first;
+        auto moduleSymbol = -moduleIdTable.Symbol
+            (moduleName.empty() ? AspSystemModuleName : moduleName);
 
-        auto symbol = symbolTable.Symbol(functionDefinition->Name());
-
+        os << "        case " << moduleSymbol << ":\n";
+        if (engineAppSpecVersion == 0)
+            os << "    #endif\n";
         os
-            << "        case " << symbol << ":\n"
-            << "        {\n";
+            << "            switch (functionSymbol)\n"
+               "            {\n";
 
-        const auto &parameters = functionDefinition->Parameters();
-
-        for (auto parameterIter = parameters.ParametersBegin();
-             parameterIter != parameters.ParametersEnd();
-             parameterIter++)
+        for (const auto &definitionEntry: definitionMap.second)
         {
-            const auto &parameter = **parameterIter;
+            const auto &name = definitionEntry.first;
+            const auto &definition = definitionEntry.second.get();
+            const auto functionDefinition =
+                dynamic_cast<const FunctionDefinition *>(definition);
+            if (functionDefinition == nullptr)
+                continue;
 
-            const auto &parameterName = parameter.Name();
-            auto parameterSymbol = symbolTable.Symbol(parameterName);
+            auto symbol = symbolTable.Symbol(name);
 
-            if (parameter.IsGroup())
-            {
-                os
-                    << "            AspParameterResult " << parameterName
-                    << " = AspGroupParameterValue(engine, ns, "
-                    << parameterSymbol << ", "
-                    << (parameter.IsTupleGroup() ? "false" : "true")
-                    << ");\n"
-                    << "            if (" << parameterName
-                    << ".result != AspRunResult_OK)\n"
-                    << "                return " << parameterName
-                    << ".result;\n";
-            }
-            else
-            {
-                os
-                    << "            AspDataEntry *" << parameterName
-                    << " = AspParameterValue(engine, ns, "
-                    << parameterSymbol << ");\n"
-                    << "            if (" << parameterName << " == 0)\n"
-                    << "                return AspRunResult_OutOfDataMemory;\n";
-            }
-        }
+            os
+                << "                case " << symbol << ":\n"
+                << "                {\n";
 
-        os
-            << "            return " << functionDefinition->InternalName()
-            << "(engine, ";
-
-        for (auto parameterIter = parameters.ParametersBegin();
-             parameterIter != parameters.ParametersEnd();
-             parameterIter++)
-        {
-            const auto &parameter = **parameterIter;
-
-            os << parameter.Name();
-            if (parameter.IsGroup())
-                os << ".value";
-            os << ", ";
-        }
-
-        os
-            << "returnValue);\n"
-               "        }\n";
-    }
-    os
-        << "    }\n"
-           "    return AspRunResult_UndefinedAppFunction;\n"
-           "}\n";
-
-    // Write the application specification structure.
-    os
-        << "\nAspAppSpec AspAppSpec_" << baseName << " =\n"
-           "{";
-    unsigned specByteCount = 0;
-    for (const auto &definitionEntry: definitions)
-    {
-        const auto &definition = definitionEntry.second;
-        const auto assignment =
-            dynamic_cast<const Assignment *>(definition);
-        const auto functionDefinition =
-            dynamic_cast<const FunctionDefinition *>(definition);
-
-        os << "\n    \"";
-
-        if (assignment != nullptr)
-        {
-            const auto &value = assignment->Value();
-            WriteStringEscapedHex
-                (os,
-                 static_cast<uint8_t>
-                    (value == nullptr ?
-                     AppSpecPrefix_Symbol : AppSpecPrefix_Variable));
-            specByteCount++;
-
-            if (value != nullptr)
-                WriteValue(os, &specByteCount, *value);
-        }
-        else if (functionDefinition != nullptr)
-        {
-            auto &parameters = functionDefinition->Parameters();
-
-            auto parameterCount = parameters.ParametersSize();
-            if (parameterCount >
-                static_cast<size_t>(AppSpecPrefix_MaxFunctionParameterCount))
-            {
-                ostringstream oss;
-                oss
-                    << "Function '" << functionDefinition->Name()
-                    << "' has too many parameters ("
-                    << parameterCount << " vs. max "
-                    << AppSpecPrefix_MaxFunctionParameterCount << ')';
-                throw oss.str();
-            }
-            WriteStringEscapedHex(os, static_cast<uint8_t>(parameterCount));
-            specByteCount++;
+            const auto &parameters = functionDefinition->Parameters();
 
             for (auto parameterIter = parameters.ParametersBegin();
                  parameterIter != parameters.ParametersEnd();
@@ -315,27 +282,209 @@ void Generator::WriteApplicationCode(ostream &os) const
             {
                 const auto &parameter = **parameterIter;
 
-                int32_t parameterSymbol = symbolTable.Symbol(parameter.Name());
-                auto word = *reinterpret_cast<uint32_t *>(&parameterSymbol);
+                const auto &parameterName = parameter.Name();
+                auto parameterSymbol = symbolTable.Symbol(parameterName);
 
-                uint32_t parameterType = 0;
-                const auto &defaultValue = parameter.DefaultValue();
-                if (defaultValue != nullptr)
-                    parameterType = AppSpecParameterType_Defaulted;
-                else if (parameter.IsTupleGroup())
-                    parameterType = AppSpecParameterType_TupleGroup;
-                else if (parameter.IsDictionaryGroup())
-                    parameterType = AppSpecParameterType_DictionaryGroup;
-                word |= parameterType << AspWordBitSize;
-
-                WriteStringEscapedHex(os, word);
-                specByteCount += sizeof word;
-
-                if (defaultValue != nullptr)
-                    WriteValue(os, &specByteCount, *defaultValue);
+                if (parameter.IsGroup())
+                {
+                    os
+                        << "                    AspParameterResult _"
+                        << parameterName
+                        << " = AspGroupParameterValue(engine, ns, "
+                        << parameterSymbol << ", "
+                        << (parameter.IsTupleGroup() ? "false" : "true")
+                        << ");\n"
+                        << "                    if (_" << parameterName
+                        << ".result != AspRunResult_OK)\n"
+                        << "                        return _" << parameterName
+                        << ".result;\n";
+                }
+                else
+                {
+                    os
+                        << "                    AspDataEntry *_"
+                        << parameterName
+                        << " = AspParameterValue(engine, ns, "
+                        << parameterSymbol << ");\n"
+                        << "                    if (_" << parameterName
+                        << " == 0)\n"
+                        << "                        "
+                        << "return AspRunResult_OutOfDataMemory;\n";
+                }
             }
+
+            os
+                << "                    return "
+                << functionDefinition->InternalName()
+                << "(engine, ";
+
+            for (auto parameterIter = parameters.ParametersBegin();
+                 parameterIter != parameters.ParametersEnd();
+                 parameterIter++)
+            {
+                const auto &parameter = **parameterIter;
+
+                os << '_' << parameter.Name();
+                if (parameter.IsGroup())
+                    os << ".value";
+                os << ", ";
+            }
+
+            os
+                << "returnValue);\n"
+                   "                }\n";
         }
+
+        os << "            }\n";
+        if (engineAppSpecVersion == 0)
+            os << "    " << engineAppSpec1EngineVersionGoodCheck << '\n';
+        os << "            break;\n";
+    }
+    os << "    }\n";
+    if (engineAppSpecVersion == 0)
+        os << "    #endif\n";
+    os
+        << "    return AspRunResult_UndefinedAppFunction;\n"
+           "}\n";
+
+    // Write the application specification structure.
+    os
+        << "\nAspAppSpec AspAppSpec_" << baseName << " =\n"
+           "{";
+    unsigned specByteCount = 0;
+    if (engineAppSpecVersion >= 1u)
+    {
+        os << "\n    \"\\xFF\\xFF";
+        specByteCount += 2;
+        WriteStringEscapedHex(os, engineAppSpecVersion);
+        specByteCount += sizeof engineAppSpecVersion;
+        auto moduleCount = static_cast<uint32_t>(definitions.size()) - 1u;
+        WriteStringEscapedHex(os, moduleCount);
+        specByteCount += sizeof moduleCount;
         os << '"';
+    }
+    for (const auto &definitionMap: definitions)
+    {
+        const auto &moduleName = definitionMap.first;
+
+        // Write a module entry if applicable.
+        if (!moduleName.empty())
+        {
+            os << "\n    \"";
+
+            // Write the symbol for this module entry.
+            auto moduleSymbol = -moduleIdTable.Symbol(moduleName);
+            WriteStringEscapedHex
+                (os, *reinterpret_cast<uint32_t *>(&moduleSymbol));
+            specByteCount += sizeof moduleSymbol;
+
+            WriteStringEscapedHex
+                (os, static_cast<uint8_t>(AppSpecPrefix_Module));
+            specByteCount++;
+            os << '"';
+        }
+
+        for (const auto &definitionEntry: definitionMap.second)
+        {
+            const auto &name = definitionEntry.first;
+            const auto &definition = definitionEntry.second.get();
+            const auto moduleImport =
+                dynamic_cast<const Import *>(definition);
+            const auto assignment =
+                dynamic_cast<const Assignment *>(definition);
+            const auto functionDefinition =
+                dynamic_cast<const FunctionDefinition *>(definition);
+
+            os << "\n    \"";
+
+            // Write the symbol for this entry if applicable.
+            if (engineAppSpecVersion >= 1u)
+            {
+                auto nameSymbol = symbolTable.Symbol(name);
+                WriteStringEscapedHex
+                    (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
+                specByteCount += sizeof nameSymbol;
+            }
+
+            // Write the rest of the entry.
+            if (moduleImport != nullptr)
+            {
+                WriteStringEscapedHex
+                    (os, static_cast<uint8_t>(AppSpecPrefix_Import));
+                specByteCount++;
+
+                auto moduleSymbol = -moduleIdTable.Symbol
+                    (moduleImport->ModuleName());
+                WriteStringEscapedHex
+                    (os, *reinterpret_cast<uint32_t *>(&moduleSymbol));
+                specByteCount += sizeof moduleSymbol;
+            }
+            else if (assignment != nullptr)
+            {
+                const auto &value = assignment->Value();
+                WriteStringEscapedHex
+                    (os,
+                     static_cast<uint8_t>
+                        (value == nullptr ?
+                         AppSpecPrefix_Symbol : AppSpecPrefix_Variable));
+                specByteCount++;
+
+                if (value != nullptr)
+                    WriteValue(os, &specByteCount, *value);
+            }
+            else if (functionDefinition != nullptr)
+            {
+                auto &parameters = functionDefinition->Parameters();
+
+                auto parameterCount = parameters.ParametersSize();
+                if (parameterCount > static_cast<size_t>
+                    (AppSpecPrefix_MaxFunctionParameterCount))
+                {
+                    WriteStringEscapedHex
+                        (os, static_cast<uint8_t>(AppSpecPrefix_Function));
+                    specByteCount++;
+
+                    WriteStringEscapedHex
+                        (os, static_cast<uint32_t>(parameterCount));
+                    specByteCount += 4;
+                }
+                else
+                {
+                    WriteStringEscapedHex
+                        (os, static_cast<uint8_t>(parameterCount));
+                    specByteCount++;
+                }
+
+                for (auto parameterIter = parameters.ParametersBegin();
+                     parameterIter != parameters.ParametersEnd();
+                     parameterIter++)
+                {
+                    const auto &parameter = **parameterIter;
+
+                    int32_t parameterSymbol = symbolTable.Symbol
+                        (parameter.Name());
+                    auto word = *reinterpret_cast<uint32_t *>
+                        (&parameterSymbol);
+
+                    uint32_t parameterType = 0;
+                    const auto &defaultValue = parameter.DefaultValue();
+                    if (defaultValue != nullptr)
+                        parameterType = AppSpecParameterType_Defaulted;
+                    else if (parameter.IsTupleGroup())
+                        parameterType = AppSpecParameterType_TupleGroup;
+                    else if (parameter.IsDictionaryGroup())
+                        parameterType = AppSpecParameterType_DictionaryGroup;
+                    word |= parameterType << AspWordBitSize;
+
+                    WriteStringEscapedHex(os, word);
+                    specByteCount += sizeof word;
+
+                    if (defaultValue != nullptr)
+                        WriteValue(os, &specByteCount, *defaultValue);
+                }
+            }
+            os << '"';
+        }
     }
 
     {
@@ -374,73 +523,113 @@ uint32_t Generator::ComputeCheckValue() const
 
     // Contribute each definition to the check value.
     static const string
+        CheckValueModulePrefix = ".",
+        CheckValueImportPrefix = "!",
         CheckValueVariablePrefix = "\v",
         CheckValueFunctionPrefix = "\f",
         CheckValueParameterPrefix = "(";
-    for (const auto &definitionEntry: definitions)
+    for (const auto &definitionMap: definitions)
     {
-        const auto &name = definitionEntry.first;
-        const auto &definition = definitionEntry.second;
-        const auto assignment =
-            dynamic_cast<const Assignment *>(definition);
-        const auto functionDefinition =
-            dynamic_cast<const FunctionDefinition *>(definition);
+        const auto &moduleName = definitionMap.first;
 
-        if (assignment != nullptr)
+        // Contribute the module name.
+        if (!moduleName.empty())
         {
-            const auto &value = assignment->Value();
-
-            // Contribute the variable name.
             crc_add
                 (&spec, &session,
-                 CheckValueVariablePrefix.c_str(),
-                 static_cast<unsigned>(CheckValueVariablePrefix.size()));
+                 CheckValueModulePrefix.c_str(),
+                 static_cast<unsigned>(CheckValueModulePrefix.size()));
             crc_add
                 (&spec, &session,
-                 name.c_str(), static_cast<unsigned>(name.size()));
-
-            // Contribute the variable value if applicable.
-            if (value != nullptr)
-                ContributeValue(spec, session, *value);
+                 moduleName.c_str(), static_cast<unsigned>(moduleName.size()));
         }
-        else if (functionDefinition != nullptr)
+
+        for (const auto &definitionEntry: definitionMap.second)
         {
-            // Contribute the function name.
-            crc_add
-                (&spec, &session,
-                 CheckValueFunctionPrefix.c_str(),
-                 static_cast<unsigned>(CheckValueFunctionPrefix.size()));
-            crc_add
-                (&spec, &session,
-                 name.c_str(), static_cast<unsigned>(name.size()));
+            const auto &name = definitionEntry.first;
+            const auto &definition = definitionEntry.second.get();
+            const auto moduleImport =
+                dynamic_cast<const Import *>(definition);
+            const auto assignment =
+                dynamic_cast<const Assignment *>(definition);
+            const auto functionDefinition =
+                dynamic_cast<const FunctionDefinition *>(definition);
 
-            const auto &parameters = functionDefinition->Parameters();
-
-            for (auto parameterIter = parameters.ParametersBegin();
-                 parameterIter != parameters.ParametersEnd();
-                 parameterIter++)
+            if (moduleImport != nullptr)
             {
-                const auto &parameter = **parameterIter;
-                const auto &parameterName = parameter.Name();
+                const auto &moduleName = moduleImport->ModuleName();
 
-                // Contribute the parameter name.
+                // Contribute the import and module names.
                 crc_add
                     (&spec, &session,
-                     CheckValueParameterPrefix.c_str(),
-                     static_cast<unsigned>(CheckValueParameterPrefix.size()));
+                     CheckValueImportPrefix.c_str(),
+                     static_cast<unsigned>
+                         (CheckValueImportPrefix.size()));
                 crc_add
                     (&spec, &session,
-                     parameterName.c_str(),
-                     static_cast<unsigned>(parameterName.size()));
-
-                // Contribute the default value if present.
-                const auto &defaultValue = parameter.DefaultValue();
-                if (defaultValue != nullptr)
-                    ContributeValue(spec, session, *defaultValue);
+                     name.c_str(), static_cast<unsigned>(name.size()));
+                crc_add
+                    (&spec, &session,
+                     moduleName.c_str(),
+                     static_cast<unsigned>(moduleName.size()));
             }
+            else if (assignment != nullptr)
+            {
+                const auto &value = assignment->Value();
+
+                // Contribute the variable name.
+                crc_add
+                    (&spec, &session,
+                     CheckValueVariablePrefix.c_str(),
+                     static_cast<unsigned>(CheckValueVariablePrefix.size()));
+                crc_add
+                    (&spec, &session,
+                     name.c_str(), static_cast<unsigned>(name.size()));
+
+                // Contribute the variable value if applicable.
+                if (value != nullptr)
+                    ContributeValue(spec, session, *value);
+            }
+            else if (functionDefinition != nullptr)
+            {
+                // Contribute the function name.
+                crc_add
+                    (&spec, &session,
+                     CheckValueFunctionPrefix.c_str(),
+                     static_cast<unsigned>(CheckValueFunctionPrefix.size()));
+                crc_add
+                    (&spec, &session,
+                     name.c_str(), static_cast<unsigned>(name.size()));
+
+                const auto &parameters = functionDefinition->Parameters();
+
+                for (auto parameterIter = parameters.ParametersBegin();
+                     parameterIter != parameters.ParametersEnd();
+                     parameterIter++)
+                {
+                    const auto &parameter = **parameterIter;
+                    const auto &parameterName = parameter.Name();
+
+                    // Contribute the parameter name.
+                    crc_add
+                        (&spec, &session,
+                         CheckValueParameterPrefix.c_str(),
+                         static_cast<unsigned>
+                            (CheckValueParameterPrefix.size()));
+                    crc_add
+                        (&spec, &session,
+                         parameterName.c_str(),
+                         static_cast<unsigned>(parameterName.size()));
+
+                    // Contribute the default value if present.
+                    const auto &defaultValue = parameter.DefaultValue();
+                    if (defaultValue != nullptr)
+                        ContributeValue(spec, session, *defaultValue);
+                }
+            }
+            else
+                throw string("Internal error");
         }
-        else
-            throw string("Internal error");
     }
     return static_cast<uint32_t>(crc_finish(&spec, &session));
 }
@@ -497,7 +686,7 @@ static void WriteValue
             for (unsigned i = 0; i < valueSize; i++)
                 WriteStringEscapedHex
                     (os, static_cast<uint8_t>(value[i]));
-            *specByteCount += sizeof(valueSize) + valueSize;
+            *specByteCount += sizeof valueSize + valueSize;
             break;
         }
     }

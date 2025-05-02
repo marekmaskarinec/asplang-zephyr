@@ -9,10 +9,11 @@
 
 #ifdef __cplusplus
 #include "statement.hpp"
+#include "symbol.hpp"
 #include <iostream>
 #include <map>
 #include <string>
-class SymbolTable;
+#include <memory>
 #endif
 
 #ifdef __cplusplus
@@ -48,9 +49,8 @@ class Generator
 
         // Constructor, destructor.
         Generator
-            (std::ostream &errorStream, SymbolTable &,
+            (std::ostream &errorStream,
              const std::string &baseFileName);
-        ~Generator();
 
         // Generator methods.
         unsigned ErrorCount() const;
@@ -58,14 +58,16 @@ class Generator
         // Source file methods.
         void CurrentSource
             (const std::string &fileName,
+             const std::string &moduleName = "",
              bool newFile = true, bool isLibrary = false,
              const SourceLocation & = SourceLocation());
         bool IsLibrary() const;
         const std::string &CurrentSourceFileName() const;
+        const std::string &CurrentModuleName() const;
         SourceLocation CurrentSourceLocation() const;
 
         // Output methods.
-        void WriteCompilerSpec(std::ostream &) const;
+        void WriteCompilerSpec(std::ostream &);
         void WriteApplicationHeader(std::ostream &) const;
         void WriteApplicationCode(std::ostream &) const;
 
@@ -76,6 +78,8 @@ class Generator
         (DeclareAsLibrary, NonTerminal *, int)
     DECLARE_METHOD
         (IncludeHeader, NonTerminal *, Token *)
+    DECLARE_METHOD
+        (ImportModule, NonTerminal *, Token *, Token *)
     DECLARE_METHOD
         (MakeAssignment, NonTerminal *, Token *, Literal *)
     DECLARE_METHOD
@@ -111,6 +115,7 @@ class Generator
     /* Miscellaneous methods. */
     DECLARE_METHOD(FreeNonTerminal, void, NonTerminal *)
     DECLARE_METHOD(FreeToken, void, Token *)
+    DECLARE_METHOD(ReportWarning, void, const char *)
     DECLARE_METHOD(ReportError, void, const char *)
 
 #ifdef __cplusplus
@@ -121,11 +126,16 @@ class Generator
         Generator(const Generator &) = delete;
         Generator &operator =(const Generator &) = delete;
 
-        bool CheckReservedNameError(const std::string &);
+        bool CheckReservedNameError(const Token &);
 
+        void ReportWarning(const std::string &) const;
+        void ReportWarning(const std::string &, const SourceElement &) const;
+        void ReportWarning(const std::string &, const SourceLocation &) const;
         void ReportError(const std::string &);
         void ReportError(const std::string &, const SourceElement &);
         void ReportError(const std::string &, const SourceLocation &);
+        void ReportMessage
+            (const std::string &, const SourceLocation &, bool error) const;
         std::uint32_t CheckValue() const;
         std::uint32_t ComputeCheckValue() const;
 
@@ -136,16 +146,23 @@ class Generator
         unsigned errorCount = 0;
 
         // Code generation data.
+        uint8_t compilerAppSpecVersion = 1u;
+        uint8_t engineAppSpecVersion = 0;
         SourceLocation currentSourceLocation;
-        SymbolTable &symbolTable;
+        std::map<std::string, std::string> imports;
+        mutable SymbolTable symbolTable, moduleIdTable;
         std::string baseFileName, baseName;
 
         // Source file data.
         bool newFile = true, isLibrary = false;
-        std::string currentSourceFileName;
+        std::string currentSourceFileName, currentModuleName;
+        std::map<std::string, std::shared_ptr<NonTerminal> >
+            *currentModuleDefinitions;
 
         // Spec data.
-        std::map<std::string, NonTerminal *> definitions;
+        std::map<std::string,
+            std::map<std::string, std::shared_ptr<NonTerminal> > >
+                definitions;
         mutable bool checkValueComputed = false;
         mutable std::uint32_t checkValue = 0;
 };

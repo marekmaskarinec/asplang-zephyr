@@ -19,8 +19,8 @@
 %nonassoc NAME.
 
 // Reserved keyword tokens.
-%token AND AS ASSERT BREAK CLASS CONTINUE DEL ELIF ELSE EXCEPT EXEC.
-%token FINALLY FOR FROM GLOBAL IF IMPORT IN IS LAMBDA LOCAL NONLOCAL NOT OR.
+%token AND ASSERT BREAK CLASS CONTINUE DEL ELIF ELSE EXCEPT EXEC.
+%token FINALLY FOR FROM GLOBAL IF IN IS LAMBDA LOCAL NONLOCAL NOT OR.
 %token PASS RAISE RETURN TRY WHILE WITH YIELD.
 
 %include
@@ -77,6 +77,23 @@ statement(result) ::= INCLUDE NAME(includeName) STATEMENT_END.
 statement(result) ::= INCLUDE STRING(includeString) STATEMENT_END.
 {
     result = ACTION(IncludeHeader, includeString);
+}
+
+statement(result) ::= IMPORT NAME(importName) STATEMENT_END.
+{
+    result = ACTION(ImportModule, importName, importName);
+}
+
+statement(result) ::=
+    IMPORT NAME(importName) AS NAME(asNameToken) STATEMENT_END.
+{
+    result = ACTION(ImportModule, importName, asNameToken);
+}
+
+statement(result) ::=
+    IMPORT STRING(importString) AS NAME (asNameToken) STATEMENT_END.
+{
+    result = ACTION(ImportModule, importString, asNameToken);
 }
 
 statement(result) ::=

@@ -4,7 +4,6 @@
 
 #include "lexer.h"
 #include "generator.h"
-#include "symbol.hpp"
 #include "app.h"
 #include "search-path.hpp"
 #include <fstream>
@@ -43,7 +42,7 @@ using namespace std;
 
 struct ActiveSourceFile
 {
-    string sourceFileName;
+    string sourceFileName, moduleName;
     unique_ptr<istream> sourceStream;
     bool isLibrary;
     SourceLocation oldSourceLocation;
@@ -302,8 +301,7 @@ static int main1(int argc, char **argv)
         return 1;
     }
 
-    SymbolTable symbolTable;
-    Generator generator(cerr, symbolTable, baseName);
+    Generator generator(cerr, baseName);
     generator.CurrentSource(sourceFileName);
 
     #ifdef ASP_APPSPEC_DEBUG
@@ -323,7 +321,7 @@ static int main1(int argc, char **argv)
         (new Lexer(*sourceStream, sourceFileName));
     activeSourceFiles.emplace_back(ActiveSourceFile
     {
-        sourceFileName, move(sourceStream),
+        sourceFileName, "", move(sourceStream),
         false, SourceLocation(),
         move(lexer), ParseAlloc(malloc, &generator)
     });
@@ -373,6 +371,7 @@ static int main1(int argc, char **argv)
             // Update source file name in generator for error reporting.
             generator.CurrentSource
                 (activeSourceFile.sourceFileName,
+                 activeSourceFile.moduleName,
                  false, activeSourceFile.isLibrary,
                  oldSourceLocation);
         }
@@ -383,7 +382,7 @@ static int main1(int argc, char **argv)
                 activeSourceFile.isLibrary = true;
 
             // Check for included source file.
-            string includeFileName = generator.CurrentSourceFileName();
+            auto includeFileName = generator.CurrentSourceFileName();
             const auto &oldSourceFileName = activeSourceFile.sourceFileName;
             if (includeFileName != oldSourceFileName)
             {
@@ -448,13 +447,14 @@ static int main1(int argc, char **argv)
                     }
                 }
 
+                auto newModuleName = generator.CurrentModuleName();
                 auto oldSourceLocation = generator.CurrentSourceLocation();
-                generator.CurrentSource(newSourceFileName);
+                generator.CurrentSource(newSourceFileName, newModuleName);
                 auto lexer = unique_ptr<Lexer>
                     (new Lexer(*newSourceStream, newSourceFileName));
                 activeSourceFiles.emplace_back(ActiveSourceFile
                 {
-                    newSourceFileName, move(newSourceStream),
+                    newSourceFileName, newModuleName, move(newSourceStream),
                     false, oldSourceLocation,
                     move(lexer), ParseAlloc(malloc, &generator)
                 });
