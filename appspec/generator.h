@@ -126,8 +126,10 @@ class Generator
         Generator(const Generator &) = delete;
         Generator &operator =(const Generator &) = delete;
 
+        // Reserved name check method.
         bool CheckReservedNameError(const Token &);
 
+        // Diagnostic reporting methods.
         void ReportWarning(const std::string &) const;
         void ReportWarning(const std::string &, const SourceElement &) const;
         void ReportWarning(const std::string &, const SourceLocation &) const;
@@ -136,6 +138,8 @@ class Generator
         void ReportError(const std::string &, const SourceLocation &);
         void ReportMessage
             (const std::string &, const SourceLocation &, bool error) const;
+
+        // Check value computation methods.
         std::uint32_t CheckValue() const;
         std::uint32_t ComputeCheckValue() const;
 

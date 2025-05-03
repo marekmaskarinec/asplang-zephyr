@@ -60,6 +60,7 @@ void Generator::WriteCompilerSpec(ostream &os)
 
     // If applicable, assign symbols to import names, followed by a separator
     // to separate them from the remaining symbol names.
+    char delim = compilerAppSpecVersion >= 2u ? ' ' : '\n';
     for (const auto &importEntry: imports)
     {
         const auto &importName = importEntry.first;
@@ -68,10 +69,10 @@ void Generator::WriteCompilerSpec(ostream &os)
             continue;
 
         symbolTable.Symbol(importName);
-        os << importName << '\n';
+        os << importName << delim;
     }
     if (!imports.empty())
-        os << '\n';
+        os << delim;
 
     // Assign symbols, to variable and function names first, then to parameter
     // names, writing each name only once, in order of assigned symbol.
@@ -85,7 +86,7 @@ void Generator::WriteCompilerSpec(ostream &os)
                 continue;
 
             symbolTable.Symbol(name);
-            os << name << '\n';
+            os << name << delim;
         }
     }
     for (const auto &definitionMap: definitions)
@@ -111,7 +112,7 @@ void Generator::WriteCompilerSpec(ostream &os)
                     continue;
 
                 symbolTable.Symbol(parameterName);
-                os << parameterName << '\n';
+                os << parameterName << delim;
             }
         }
     }
