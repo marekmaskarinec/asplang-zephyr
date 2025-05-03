@@ -12,6 +12,7 @@
 #include "symbols.h"
 #include <iostream>
 #include <sstream>
+#include <string>
 #include <cstring>
 #include <cstdint>
 
@@ -28,6 +29,7 @@ Compiler::Compiler
     executable(executable),
     topLocation(executable.Insert(new NullInstruction, NoSourceLocation))
 {
+    appModuleNames.insert(AspSystemModuleName);
 }
 
 void Compiler::LoadApplicationSpec(istream &specStream)
@@ -41,7 +43,7 @@ void Compiler::LoadApplicationSpec(istream &specStream)
     // Read and check application spec version.
     uint8_t version;
     specStream >> version;
-    if (version > 0x01)
+    if (version > 2u)
     {
         ostringstream oss;
         oss
@@ -50,7 +52,7 @@ void Compiler::LoadApplicationSpec(istream &specStream)
         throw oss.str();
     }
 
-    // Read application spec check value and store.
+    // Read the application specification check value and store it.
     uint32_t checkValue = 0;
     for (unsigned i = 0; i < 4; i++)
     {
@@ -62,23 +64,27 @@ void Compiler::LoadApplicationSpec(istream &specStream)
     executable.SetCheckValue(checkValue);
 
     // Define symbols for all names used in the application.
+    char delim = version >= 2u ? ' ' : '\n';
+    bool storeAppModuleNames = version >= 2u;
     while (true)
     {
         string name;
-        specStream >> name;
+        getline(specStream, name, delim);
         if (specStream.eof())
             break;
+        if (name.empty())
+        {
+            storeAppModuleNames = false;
+            continue;
+        }
+        if (storeAppModuleNames)
+            appModuleNames.insert(name);
         symbolTable.Symbol(name);
     }
 }
 
 void Compiler::AddModule(const string &moduleName)
 {
-    // Ignore import of the system module. It is implicitly imported into
-    // every module anyway.
-    if (moduleName == AspSystemModuleName)
-        return;
-
     // Store the top-level module name.
     if (moduleNames.empty())
         topModuleName = moduleName;
@@ -106,25 +112,34 @@ void Compiler::AddModuleFileName(const string &moduleFileName)
             << "Module file name '" << moduleFileName
             << "' does not end with '" << ModuleSuffix << '\'';
         ReportError(oss.str());
+        return;
     }
 
-    // Strip off the suffix and add the module name.
+    // Strip off the suffix to obtain the module name.
     string moduleName = moduleFileName.substr(0, suffixIndex);
-    if (moduleName == AspSystemModuleName)
+
+    // Ensure the module name is not already defined by the application.
+    if (IsAppModule(moduleName))
     {
         ostringstream oss;
         oss
             << "Cannot use module name '" << moduleName
-            << "' which is reserved for system use";
+            << "' which is reserved ";
+        if (moduleName == AspSystemModuleName)
+            oss << "for system use";
+        else
+            oss << "as an application module";
         ReportError(oss.str());
+        return;
     }
 
+    // Add the module.
     AddModule(moduleName);
 }
 
-string Compiler::NextModuleFileName()
+string Compiler::NextModule()
 {
-    string moduleFileName;
+    string moduleName;
     if (moduleNamesToImport.empty())
         currentModuleName.clear();
     else
@@ -132,9 +147,14 @@ string Compiler::NextModuleFileName()
         currentModuleName = moduleNamesToImport.front();
         currentModuleSymbol = symbolTable.Symbol(currentModuleName);
         moduleNamesToImport.pop_front();
-        moduleFileName = currentModuleName + ModuleSuffix;
+        moduleName = currentModuleName;
     }
-    return moduleFileName;
+    return moduleName;
+}
+
+bool Compiler::IsAppModule(const string &moduleName) const
+{
+    return appModuleNames.find(moduleName) != appModuleNames.end();
 }
 
 unsigned Compiler::ErrorCount() const

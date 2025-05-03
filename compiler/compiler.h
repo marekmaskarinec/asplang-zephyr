@@ -70,7 +70,8 @@ class Compiler
         void LoadApplicationSpec(std::istream &);
         void AddModule(const std::string &);
         void AddModuleFileName(const std::string &);
-        std::string NextModuleFileName();
+        std::string NextModule();
+        bool IsAppModule(const std::string &) const;
         unsigned ErrorCount() const;
         void Finalize();
 
@@ -345,7 +346,7 @@ class Compiler
         Executable::Location topLocation;
 
         // Module data.
-        std::set<std::string> moduleNames;
+        std::set<std::string> appModuleNames, moduleNames;
         std::string topModuleName;
         std::deque<std::string> moduleNamesToImport;
         std::string currentModuleName;

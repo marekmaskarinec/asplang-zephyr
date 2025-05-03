@@ -441,12 +441,14 @@ static int main1(int argc, char **argv)
         searchPath.emplace_back();
 
     // Compile main module and any other modules that are imported.
-    bool errorDetected = false;
-    while (true)
+    bool errorDetected = compiler.ErrorCount() > 0;
+    while (!errorDetected)
     {
-        string moduleFileName = compiler.NextModuleFileName();
-        if (moduleFileName.empty())
+        string moduleName = compiler.NextModule();
+        if (moduleName.empty())
             break;
+        static string sourceSuffix = ".asp";
+        string moduleFileName = moduleName + sourceSuffix;
 
         // Open module file.
         auto moduleStream = unique_ptr<istream>();
@@ -479,6 +481,18 @@ static int main1(int argc, char **argv)
                     (new ifstream(modulePathName));
                 if (*stream)
                 {
+                    // Issue a warning if the module's name matches an
+                    // application module.
+                    if (compiler.IsAppModule(moduleName))
+                    {
+                        cerr
+                            << "WARNING: Importing application module "
+                            << moduleName << " instead of "
+                            << modulePathName << " found on path" << endl;
+                        stream.reset();
+                        continue;
+                    }
+
                     moduleStream = move(stream);
                     break;
                 }
@@ -486,6 +500,10 @@ static int main1(int argc, char **argv)
         }
         if (moduleStream == nullptr)
         {
+            // Ignore failure to find an application module in the path.
+            if (compiler.IsAppModule(moduleName))
+                continue;
+
             cerr
                 << "Error opening " << moduleFileName
                 << ": " << strerror(errno) << endl;
