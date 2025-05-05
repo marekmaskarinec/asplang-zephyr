@@ -4,6 +4,7 @@
 
 #include "symbol.hpp"
 #include "symbols.h"
+#include "data.h"
 #include <utility>
 
 using namespace std;
@@ -27,7 +28,7 @@ int32_t SymbolTable::Symbol(const string &name)
         if (nextUnnamedSymbol == 0)
             throw string("Maximum number of temporary symbols exceeded");
         auto result = nextUnnamedSymbol;
-        if (nextUnnamedSymbol == INT32_MIN)
+        if (nextUnnamedSymbol == AspSignedWordMin)
             nextUnnamedSymbol = 0;
         else
             nextUnnamedSymbol--;
@@ -35,12 +36,13 @@ int32_t SymbolTable::Symbol(const string &name)
     }
 
     // Return a unique symbol for the given name.
-    if (nextNamedSymbol == 0 && !symbolsByName.empty())
-        throw string("Maximum number of name symbols exceeded");
+    bool empty =  symbolsByName.empty();
     auto result = symbolsByName.insert(make_pair(name, nextNamedSymbol));
     if (result.second)
     {
-        if (nextNamedSymbol == INT32_MAX)
+        if (nextNamedSymbol == 0 && !empty)
+            throw string("Maximum number of name symbols exceeded");
+        if (nextNamedSymbol == AspSignedWordMax)
             nextNamedSymbol = 0;
         else
             nextNamedSymbol++;
