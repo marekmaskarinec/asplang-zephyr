@@ -376,14 +376,18 @@ AspRunResult AspCallFunction
     if (callerAgain || AspDataGetFunctionIsApp(function))
     {
         /* Call the application function. */
+        AspDataEntry *appFunctionModule = AspValueEntry
+            (engine, AspDataGetFunctionModuleIndex(engine->appFunction));
+        int32_t appFunctionModuleSymbol = AspDataGetModuleSymbol
+            (appFunctionModule);
         int32_t appFunctionSymbol = AspDataGetFunctionSymbol
             (engine->appFunction);
         engine->nextSymbol = -1;
         engine->inApp = true;
         AspRunResult callResult = engine->appSpec->dispatch
             (engine,
-             appFunctionSymbol, engine->appFunctionNamespace,
-             &engine->appFunctionReturnValue);
+             appFunctionModuleSymbol, appFunctionSymbol,
+             engine->appFunctionNamespace, &engine->appFunctionReturnValue);
         engine->inApp = false;
         if (callResult != AspRunResult_OK &&
             callResult != AspRunResult_Again &&

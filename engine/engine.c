@@ -24,7 +24,11 @@ static void ProcessCodeHeader(AspEngine *);
 static AspRunResult ResetData(AspEngine *);
 static AspRunResult InitializeAppDefinitions(AspEngine *);
 static AspRunResult LoadValue
-    (AspEngine *, unsigned *specIndex, AspDataEntry **);
+    (AspEngine *, unsigned specSize, unsigned *specIndex, AspDataEntry **);
+static AspRunResult LoadUnsignedInteger
+    (const uint8_t *, unsigned specSize, unsigned *specIndex, uint32_t *);
+static AspRunResult LoadSignedInteger
+    (const uint8_t *, unsigned specSize, unsigned *specIndex, int32_t *);
 
 static const uint8_t HeaderSize = 12;
 static const size_t MaxCodeSize = 1 << AspWordBitSize;
@@ -409,22 +413,24 @@ static AspRunResult ResetData(AspEngine *engine)
     if (engine->modules == 0)
         return AspRunResult_OutOfDataMemory;
 
-    /* Create the system module. This is where app function definitions go. */
+    /* Create the system module. This is where top-level application
+       definitions go. */
     engine->systemNamespace = AspAllocEntry(engine, DataType_Namespace);
     if (engine->systemNamespace == 0)
         return AspRunResult_OutOfDataMemory;
     engine->systemModule = AspAllocEntry(engine, DataType_Module);
     if (engine->systemModule == 0)
         return AspRunResult_OutOfDataMemory;
-    AspDataSetModuleCodeAddress(engine->systemModule, 0);
+    AspDataSetModuleIsApp(engine->systemModule, true);
+    AspDataSetModuleSymbol(engine->systemModule, 0);
     AspDataSetModuleNamespaceIndex
         (engine->systemModule, AspIndex(engine, engine->systemNamespace));
     AspDataSetModuleIsLoaded(engine->systemModule, true);
     AspTreeResult addSystemModuleResult = AspTreeTryInsertBySymbol
         (engine, engine->modules, AspSystemModuleSymbol, engine->systemModule);
-    AspUnref(engine, engine->systemModule);
     if (addSystemModuleResult.result != AspRunResult_OK)
         return addSystemModuleResult.result;
+    AspUnref(engine, engine->systemModule);
     engine->module = engine->systemModule;
 
     /* Add an empty arguments tuple to the system module. */
@@ -462,49 +468,183 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
         #endif
     }
 
-    /* Create definitions for application variables and functions.
-       Note that the first few symbols are reserved. */
+    /* Determine the version of the specification string and ensure it's
+       valid. */
     unsigned specIndex = 0;
     const uint8_t *spec = (const uint8_t *)engine->appSpec->spec;
-    for (int32_t symbol = AspScriptSymbolBase;
-         symbol <= AspSignedWordMax; symbol++)
+    unsigned specSize = engine->appSpec->specSize;
+    uint8_t version = 0;
+    if (specSize >= 3 && spec[0] == 0xFF && spec[1] == 0xFF)
     {
-        if (specIndex >= engine->appSpec->specSize)
+        specIndex += 2;
+        version = spec[specIndex++];
+    }
+    if (version > 1u)
+        return AspRunResult_InitializationError;
+
+    /* Create application modules if applicable. */
+    int32_t appModuleCount = 0;
+    if (version >= 1u)
+    {
+        AspRunResult result = LoadSignedInteger
+            (spec, specSize, &specIndex, &appModuleCount);
+        if (result != AspRunResult_OK)
+            return result;
+
+        /* Create the application modules. */
+        for (int32_t appModuleSymbol = -1;
+             appModuleSymbol >= -appModuleCount;
+             appModuleSymbol--)
+        {
+            /* Create a namespace for the application module. */
+            AspDataEntry *appNamespace = AspAllocEntry
+                (engine, DataType_Namespace);
+            if (appNamespace == 0)
+                return AspRunResult_OutOfDataMemory;
+            AspDataEntry *appModule = AspAllocEntry
+                (engine, DataType_Module);
+            if (appModule == 0)
+                return AspRunResult_OutOfDataMemory;
+            AspDataSetModuleIsApp(appModule, true);
+            AspDataSetModuleSymbol(appModule, appModuleSymbol);
+            AspDataSetModuleNamespaceIndex
+                (appModule, AspIndex(engine, appNamespace));
+            AspDataSetModuleIsLoaded(appModule, true);
+
+            /* Insert the application module into the modules collection by its
+               temporary symbol. This entry will be removed after all the
+               application module imports have been processed. */
+            AspTreeResult addAppModuleResult = AspTreeTryInsertBySymbol
+                (engine, engine->modules, appModuleSymbol, appModule);
+            if (addAppModuleResult.result != AspRunResult_OK)
+                return addAppModuleResult.result;
+            AspUnref(engine, appModule);
+        }
+    }
+
+    /* Create definitions for application variables, functions, and application
+       module imports. Note that the first few symbols are reserved. */
+    AspDataEntry *currentAppModule = engine->module;
+    AspDataEntry *currentAppNamespace = engine->systemNamespace;
+    for (int32_t version0Symbol = AspScriptSymbolBase;
+         version0Symbol <= AspSignedWordMax; version0Symbol++)
+    {
+        if (specIndex >= specSize)
             break;
 
+        /* Determine the entry's symbol. */
+        int32_t symbol = version0Symbol;
+        if (version >= 1u)
+        {
+            AspRunResult result = LoadSignedInteger
+                (spec, specSize, &specIndex, &symbol);
+            if (result != AspRunResult_OK)
+                return result;
+        }
+
+        /* Read the entry prefix and process the entry. */
         uint8_t prefix = spec[specIndex++];
         if (prefix == AppSpecPrefix_Variable)
         {
+            /* Create the variable's value. */
             AspDataEntry *value = 0;
             AspRunResult loadValueResult = LoadValue
-                (engine, &specIndex, &value);
+                (engine, specSize, &specIndex, &value);
             if (loadValueResult != AspRunResult_OK)
                 return loadValueResult;
 
+            /* Insert the variable into the current namespace. */
             AspTreeResult insertResult = AspTreeTryInsertBySymbol
-                (engine, engine->systemNamespace, symbol, value);
+                (engine, currentAppNamespace, symbol, value);
             if (insertResult.result != AspRunResult_OK)
                 return insertResult.result;
             if (!insertResult.inserted)
                 return AspRunResult_InitializationError;
             AspUnref(engine, value);
         }
-        else if (prefix != AppSpecPrefix_Symbol)
+        else if (version >= 1u && prefix == AppSpecPrefix_Module)
         {
-            unsigned parameterCount = prefix;
+            /* Locate the application module. */
+            AspTreeResult findAppModuleResult = AspFindSymbol
+                (engine, engine->modules, symbol);
+            if (findAppModuleResult.result != AspRunResult_OK)
+                return findAppModuleResult.result;
+            if (findAppModuleResult.node == 0)
+                return AspRunResult_InitializationError;
+            currentAppModule = findAppModuleResult.value;
+            if (AspDataGetType(currentAppModule) != DataType_Module)
+                return AspRunResult_InitializationError;
 
+            /* Switch to the module's namespace for inserting new items. */
+            currentAppNamespace = AspEntry
+                (engine, AspDataGetModuleNamespaceIndex(currentAppModule));
+        }
+        else if (version >= 1u && prefix == AppSpecPrefix_Import)
+        {
+            /* Read the symbol of the application module to import. */
+            int32_t appModuleSymbol;
+            AspRunResult result = LoadSignedInteger
+                (spec, specSize, &specIndex, &appModuleSymbol);
+            if (result != AspRunResult_OK)
+                return result;
+
+            /* Locate the application module. */
+            AspTreeResult findAppModuleResult = AspFindSymbol
+                (engine, engine->modules, appModuleSymbol);
+            if (findAppModuleResult.result != AspRunResult_OK)
+                return findAppModuleResult.result;
+            if (findAppModuleResult.node == 0)
+                return AspRunResult_InitializationError;
+            AspDataEntry *appModule = findAppModuleResult.value;
+            if (AspDataGetType(appModule) != DataType_Module)
+                return AspRunResult_InitializationError;
+
+            /* Insert the application module into the current namespace by its
+               import symbol. */
+            AspTreeResult symbolInsertResult = AspTreeTryInsertBySymbol
+                (engine, currentAppNamespace, symbol, appModule);
+            if (symbolInsertResult.result != AspRunResult_OK)
+                return symbolInsertResult.result;
+            if (!symbolInsertResult.inserted)
+                return AspRunResult_InitializationError;
+
+            /* Insert the application module into the modules collection by its
+               import symbol if not already done previously. */
+            AspTreeResult moduleInsertResult = AspTreeTryInsertBySymbol
+                (engine, engine->modules, symbol, appModule);
+            if (moduleInsertResult.result != AspRunResult_OK)
+                return moduleInsertResult.result;
+            AspDataEntry *existingAppModule = moduleInsertResult.value;
+            if (AspDataGetType(existingAppModule) != DataType_Module)
+                return AspRunResult_InitializationError;
+        }
+        else if (version >= 1u && prefix == AppSpecPrefix_Function ||
+                 prefix != AppSpecPrefix_Symbol)
+        {
+            /* Determine the number of parameters for the function. */
+            uint32_t parameterCount;
+            if (version == 0 || prefix != AppSpecPrefix_Function)
+                parameterCount = prefix;
+            else
+            {
+                AspRunResult result = LoadUnsignedInteger
+                    (spec, specSize, &specIndex, &parameterCount);
+                if (result != AspRunResult_OK)
+                    return result;
+            }
+
+            /* Create the function's parameter list. */
             AspDataEntry *parameters = AspAllocEntry
                 (engine, DataType_ParameterList);
             if (parameters == 0)
                 return AspRunResult_OutOfDataMemory;
-            for (unsigned p = 0; p < parameterCount; p++)
+            for (uint32_t p = 0; p < parameterCount; p++)
             {
-                uint32_t parameterSpec = 0;
-                for (unsigned i = 0; i < 4; i++)
-                {
-                    parameterSpec <<= 8;
-                    parameterSpec |= spec[specIndex++];
-                }
+                uint32_t parameterSpec;
+                AspRunResult result = LoadUnsignedInteger
+                    (spec, specSize, &specIndex, &parameterSpec);
+                if (result != AspRunResult_OK)
+                    return result;
                 uint32_t parameterSymbol =
                     (int32_t)(parameterSpec & ParameterSpecMask);
                 uint8_t parameterType =
@@ -529,7 +669,7 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
                 {
                     AspDataEntry *defaultValue = 0;
                     AspRunResult loadValueResult = LoadValue
-                        (engine, &specIndex, &defaultValue);
+                        (engine, specSize, &specIndex, &defaultValue);
                     if (loadValueResult != AspRunResult_OK)
                         return loadValueResult;
                     AspDataSetParameterDefaultIndex
@@ -542,19 +682,21 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
                     return parameterResult.result;
             }
 
+            /* Create the function. */
             AspDataEntry *function = AspAllocEntry(engine, DataType_Function);
             if (function == 0)
                 return AspRunResult_OutOfDataMemory;
             AspDataSetFunctionSymbol(function, symbol);
             AspDataSetFunctionIsApp(function, true);
-            AspRef(engine, engine->module);
+            AspRef(engine, currentAppModule);
             AspDataSetFunctionModuleIndex
-                (function, AspIndex(engine, engine->module));
+                (function, AspIndex(engine, currentAppModule));
             AspDataSetFunctionParametersIndex
                 (function, AspIndex(engine, parameters));
 
+            /* Insert the function into the current namespace. */
             AspTreeResult insertResult = AspTreeTryInsertBySymbol
-                (engine, engine->systemNamespace, symbol, function);
+                (engine, currentAppNamespace, symbol, function);
             if (insertResult.result != AspRunResult_OK)
                 return insertResult.result;
             if (!insertResult.inserted)
@@ -563,14 +705,37 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
         }
     }
 
+    /* Drop temporary references to any application modules. */
+    for (int32_t appModuleSymbol = -1;
+         appModuleSymbol >= -appModuleCount;
+         appModuleSymbol--)
+    {
+        /* Locate the application module by its temporary symbol. */
+        AspTreeResult findAppModuleResult = AspFindSymbol
+            (engine, engine->modules, appModuleSymbol);
+        if (findAppModuleResult.result != AspRunResult_OK)
+            return findAppModuleResult.result;
+        if (findAppModuleResult.node == 0)
+            return AspRunResult_InitializationError;
+
+        /* Remove the temporary application module from the modules
+           collection. */
+        AspRunResult eraseResult = AspTreeEraseNode
+            (engine, engine->modules, findAppModuleResult.node,
+             true, true);
+        if (eraseResult != AspRunResult_OK)
+            return eraseResult;
+    }
+
     /* Ensure we read the application spec correctly. */
     return
-        specIndex != engine->appSpec->specSize ?
+        specIndex != specSize ?
         AspRunResult_InitializationError : AspRunResult_OK;
 }
 
 static AspRunResult LoadValue
-    (AspEngine *engine, unsigned *specIndex, AspDataEntry **valueEntry)
+    (AspEngine *engine, unsigned specSize, unsigned *specIndex,
+     AspDataEntry **valueEntry)
 {
     const uint8_t *spec = (const uint8_t *)engine->appSpec->spec;
     uint32_t valueType = spec[(*specIndex)++];
@@ -589,6 +754,8 @@ static AspRunResult LoadValue
 
         case AppSpecValueType_Boolean:
         {
+            if (*specIndex + 1 > specSize)
+                return AspRunResult_InitializationError;
             uint8_t value = spec[(*specIndex)++];
             *valueEntry = AspNewBoolean(engine, value != 0);
             break;
@@ -596,19 +763,19 @@ static AspRunResult LoadValue
 
         case AppSpecValueType_Integer:
         {
-            uint32_t uValue = 0;
-            for (unsigned i = 0; i < 4; i++)
-            {
-                uValue <<= 8;
-                uValue |= spec[(*specIndex)++];
-            }
-            int32_t value = *(int32_t *)&uValue;
+            int32_t value;
+            AspRunResult result = LoadSignedInteger
+                (spec, specSize, specIndex, &value);
+            if (result != AspRunResult_OK)
+                return result;
             *valueEntry = AspNewInteger(engine, value);
             break;
         }
 
         case AppSpecValueType_Float:
         {
+            if (*specIndex + 4 > specSize)
+                return AspRunResult_InitializationError;
             static const uint16_t word = 1;
             bool be = *(const char *)&word == 0;
 
@@ -626,12 +793,16 @@ static AspRunResult LoadValue
 
         case AppSpecValueType_String:
         {
+            if (*specIndex + 4 > specSize)
+                return AspRunResult_InitializationError;
             uint32_t valueSize = 0;
             for (unsigned i = 0; i < 4; i++)
             {
                 valueSize <<= 8;
                 valueSize |= spec[(*specIndex)++];
             }
+            if (*specIndex + valueSize > specSize)
+                return AspRunResult_InitializationError;
             *valueEntry = AspNewString
                 (engine, (const char *)(spec + *specIndex), valueSize);
             *specIndex += valueSize;
@@ -642,6 +813,36 @@ static AspRunResult LoadValue
     return
         *valueEntry == 0 ?
         AspRunResult_OutOfDataMemory : AspRunResult_OK;
+}
+
+static AspRunResult LoadUnsignedInteger
+    (const uint8_t *spec, unsigned specSize, unsigned *specIndex,
+     uint32_t *value)
+{
+    if (*specIndex + 4 > specSize)
+        return AspRunResult_InitializationError;
+
+    *value = 0;
+    for (unsigned i = 0; i < 4; i++)
+    {
+        *value <<= 8;
+        *value |= spec[(*specIndex)++];
+    }
+    return AspRunResult_OK;
+}
+
+static AspRunResult LoadSignedInteger
+    (const uint8_t *spec, unsigned specSize, unsigned *specIndex,
+     int32_t *value)
+{
+    uint32_t uValue;
+    AspRunResult result = LoadUnsignedInteger
+        (spec, specSize, specIndex, &uValue);
+    if (result != AspRunResult_OK)
+        return result;
+
+    *value = *(int32_t *)&uValue;
+    return AspRunResult_OK;
 }
 
 bool AspIsReady(const AspEngine *engine)

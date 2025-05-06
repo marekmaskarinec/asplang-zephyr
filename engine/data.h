@@ -288,6 +288,14 @@ int32_t AspDataGetSignedWord3(const AspDataEntry *);
     (AspDataGetWord3((eptr)))
 
 /* Module entry field access. */
+#define AspDataSetModuleIsApp(eptr, value) \
+    (AspDataSetBit0((eptr), (unsigned)(value)))
+#define AspDataGetModuleIsApp(eptr) \
+    ((bool)(AspDataGetBit0((eptr))))
+#define AspDataSetModuleSymbol(eptr, value) \
+    (AspDataSetSignedWord0((eptr), (value)))
+#define AspDataGetModuleSymbol(eptr) \
+    (AspDataGetSignedWord0((eptr)))
 #define AspDataSetModuleCodeAddress(eptr, value) \
     (AspDataSetWord0((eptr), (value)))
 #define AspDataGetModuleCodeAddress(eptr) \

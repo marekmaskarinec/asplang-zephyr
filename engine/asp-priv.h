@@ -33,8 +33,8 @@ extern "C" {
 #endif
 
 typedef AspRunResult (AspDispatchFunction)
-    (AspEngine *, int32_t symbol, AspDataEntry *ns,
-     AspDataEntry **returnValue);
+    (AspEngine *, int32_t moduleSymbol, int32_t functionSymbol,
+     AspDataEntry *ns, AspDataEntry **returnValue);
 
 struct AspCodePageEntry
 {

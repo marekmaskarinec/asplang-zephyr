@@ -255,8 +255,12 @@ static void DumpDataEntry(uint32_t index, const AspDataEntry *entry, FILE *fp)
             break;
 
         case DataType_Module:
-            fprintf(fp, " code=0x%07X ns=0x%07X ld=%d",
-                AspDataGetModuleCodeAddress(entry),
+            if (AspDataGetModuleIsApp(entry))
+                fprintf(fp, " s=%d", AspDataGetModuleSymbol(entry));
+            else
+                fprintf(fp, " code=0x%07X",
+                    AspDataGetModuleCodeAddress(entry));
+            fprintf(fp, " ns=0x%07X ld=%d",
                 AspDataGetModuleNamespaceIndex(entry),
                 AspDataGetModuleIsLoaded(entry));
             break;
