@@ -490,6 +490,8 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
             (spec, specSize, &specIndex, &appModuleCount);
         if (result != AspRunResult_OK)
             return result;
+        if (appModuleCount < 0)
+            return AspRunResult_InitializationError;
 
         /* Create the application modules. */
         for (int32_t appModuleSymbol = -1;
@@ -524,6 +526,7 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
 
     /* Create definitions for application variables, functions, and application
        module imports. Note that the first few symbols are reserved. */
+    int32_t nextAppModuleId = 0;
     AspDataEntry *currentAppModule = engine->module;
     AspDataEntry *currentAppNamespace = engine->systemNamespace;
     for (int32_t version0Symbol = AspScriptSymbolBase;
@@ -532,18 +535,30 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
         if (specIndex >= specSize)
             break;
 
+        /* Read the entry prefix. */
+        uint8_t prefix = spec[specIndex++];
+
         /* Determine the entry's symbol. */
         int32_t symbol = version0Symbol;
         if (version >= 1u)
         {
-            AspRunResult result = LoadSignedInteger
-                (spec, specSize, &specIndex, &symbol);
-            if (result != AspRunResult_OK)
-                return result;
+            /* Ensure a symbol prefix does not appear in a version 1 or greater
+               spec. */
+            if (prefix == AppSpecPrefix_Symbol)
+                return AspRunResult_InitializationError;
+
+            /* Read a symbol for all entry types except for modules, whose
+               symbols are determined sequentially. */
+            if (prefix != AppSpecPrefix_Module)
+            {
+                AspRunResult result = LoadSignedInteger
+                    (spec, specSize, &specIndex, &symbol);
+                if (result != AspRunResult_OK)
+                    return result;
+            }
         }
 
-        /* Read the entry prefix and process the entry. */
-        uint8_t prefix = spec[specIndex++];
+        /* Read the rest of the entry. */
         if (prefix == AppSpecPrefix_Variable)
         {
             /* Create the variable's value. */
@@ -564,9 +579,9 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
         }
         else if (version >= 1u && prefix == AppSpecPrefix_Module)
         {
-            /* Locate the application module. */
+            /* Locate the next application module. */
             AspTreeResult findAppModuleResult = AspFindSymbol
-                (engine, engine->modules, symbol);
+                (engine, engine->modules, --nextAppModuleId);
             if (findAppModuleResult.result != AspRunResult_OK)
                 return findAppModuleResult.result;
             if (findAppModuleResult.node == 0)

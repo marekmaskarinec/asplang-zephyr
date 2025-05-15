@@ -5,6 +5,7 @@
 #include "symbol.hpp"
 #include "symbols.h"
 #include "data.h"
+#include <sstream>
 #include <utility>
 
 using namespace std;
@@ -36,7 +37,7 @@ int32_t SymbolTable::Symbol(const string &name)
     }
 
     // Return a unique symbol for the given name.
-    bool empty =  symbolsByName.empty();
+    bool empty = symbolsByName.empty();
     auto result = symbolsByName.insert(make_pair(name, nextNamedSymbol));
     if (result.second)
     {
@@ -48,6 +49,18 @@ int32_t SymbolTable::Symbol(const string &name)
             nextNamedSymbol++;
     }
     return result.first->second;
+}
+
+int32_t SymbolTable::Symbol(const string &name) const
+{
+    auto iter = symbolsByName.find(name);
+    if (iter == symbolsByName.end())
+    {
+        ostringstream oss;
+        oss << "Symbol name '" << name << "' not found";
+        throw oss.str();
+    }
+    return iter->second;
 }
 
 bool SymbolTable::IsDefined(const string &name) const

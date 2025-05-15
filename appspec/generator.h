@@ -11,8 +11,11 @@
 #include "statement.hpp"
 #include "symbol.hpp"
 #include <iostream>
+#include <deque>
 #include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <memory>
 #endif
 
@@ -50,15 +53,17 @@ class Generator
         // Constructor, destructor.
         Generator
             (std::ostream &errorStream,
-             const std::string &baseFileName);
+             const std::string &fileBaseName);
 
         // Generator methods.
+        void AddModule(const std::string &);
+        std::string NextModule();
         unsigned ErrorCount() const;
+        void Finalize();
 
         // Source file methods.
         void CurrentSource
             (const std::string &fileName,
-             const std::string &moduleName = "",
              bool newFile = true, bool isLibrary = false,
              const SourceLocation & = SourceLocation());
         bool IsLibrary() const;
@@ -126,7 +131,9 @@ class Generator
         Generator(const Generator &) = delete;
         Generator &operator =(const Generator &) = delete;
 
-        // Reserved name check method.
+        // Internal utility methods.
+        void ClearDefinition
+            (const std::string &, const SourceElement &, bool warn = true);
         bool CheckReservedNameError(const Token &);
 
         // Diagnostic reporting methods.
@@ -143,32 +150,84 @@ class Generator
         std::uint32_t CheckValue() const;
         std::uint32_t ComputeCheckValue() const;
 
+        // Internal data structures.
+        struct ImportedModuleInfo
+        {
+            ImportedModuleInfo() :
+                imports(new std::map<std::string, unsigned >)
+            {
+            }
+
+            std::shared_ptr
+                <std::map
+                    <std::string, // Import name
+                     unsigned > > // Use count
+                imports;
+        };
+        struct ModuleDefinitionsInfo
+        {
+            ModuleDefinitionsInfo
+                (const std::string &moduleName,
+                 std::shared_ptr <std::map
+                    <std::string, std::shared_ptr<NonTerminal> > >
+                    definitions) :
+                moduleName(moduleName),
+                definitions(definitions)
+            {
+            }
+
+            std::string moduleName;
+            std::shared_ptr
+                <std::map
+                    <std::string,
+                     std::shared_ptr<NonTerminal> > >
+                definitions;
+        };
+
     private:
 
         // Error reporting data.
         std::ostream &errorStream;
         unsigned errorCount = 0;
 
-        // Code generation data.
+        // Source code processing data.
+        std::string fileBaseName, variableBaseName;
         uint8_t compilerAppSpecVersion = 1u;
         uint8_t engineAppSpecVersion = 0;
-        SourceLocation currentSourceLocation;
-        std::map<std::string, std::string> imports;
-        mutable SymbolTable symbolTable, moduleIdTable;
-        std::string baseFileName, baseName;
-
-        // Source file data.
         bool newFile = true, isLibrary = false;
+        SourceLocation currentSourceLocation;
         std::string currentSourceFileName, currentModuleName;
-        std::map<std::string, std::shared_ptr<NonTerminal> >
-            *currentModuleDefinitions;
+        std::shared_ptr
+            <std::map<std::string, std::shared_ptr<NonTerminal> > >
+            currentModuleDefinitions;
+        std::set<std::string> moduleNames;
+        std::deque<std::string> moduleNamesToImport;
+        std::map
+            <std::string, // Import name
+             std::pair
+                <std::string, // Module name
+                 unsigned> > // Use count
+            imports;
+        std::map
+            <std::string, // Module name
+             ImportedModuleInfo>
+            importedModules;
+        std::map
+            <std::string, // Module name
+             std::shared_ptr
+                <std::map
+                    <std::string, // Definition name
+                     std::shared_ptr<NonTerminal> > > >
+            definitionsByModuleName;
 
-        // Spec data.
-        std::map<std::string,
-            std::map<std::string, std::shared_ptr<NonTerminal> > >
-                definitions;
-        mutable bool checkValueComputed = false;
-        mutable std::uint32_t checkValue = 0;
+        // Code generation data.
+        SymbolTable moduleIdTable, symbolTable;
+        std::map
+            <std::set<std::string>, // Module key
+             ModuleDefinitionsInfo>
+            definitionsByModuleKey;
+        bool finalized = false, symbolsAssigned = false;
+        std::uint32_t checkValue = 0;
 };
 
 } // extern "C"

@@ -53,13 +53,17 @@ static void WriteStringEscapedHex(ostream &os, T value)
 
 void Generator::WriteCompilerSpec(ostream &os)
 {
+    if (!finalized)
+        throw string("Internal error: Not finalized");
+
     // Write the specification's header, including check value.
     os.write("AspS", 4);
     os.put(static_cast<char>(compilerAppSpecVersion));
     Write(os, CheckValue());
 
-    // If applicable, assign symbols to import names, followed by a separator
-    // to separate them from the remaining symbol names.
+    // If applicable, assign symbols to import names, writing each name only
+    // once, all followed by a separator to separate them from the remaining
+    // symbol names.
     char delim = compilerAppSpecVersion >= 2u ? ' ' : '\n';
     for (const auto &importEntry: imports)
     {
@@ -76,9 +80,9 @@ void Generator::WriteCompilerSpec(ostream &os)
 
     // Assign symbols, to variable and function names first, then to parameter
     // names, writing each name only once, in order of assigned symbol.
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &name = definitionEntry.first;
 
@@ -89,9 +93,9 @@ void Generator::WriteCompilerSpec(ostream &os)
             os << name << delim;
         }
     }
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &definition = definitionEntry.second.get();
             const auto functionDefinition =
@@ -116,37 +120,41 @@ void Generator::WriteCompilerSpec(ostream &os)
             }
         }
     }
+
+    symbolsAssigned = true;
 }
 
 void Generator::WriteApplicationHeader(ostream &os) const
 {
+    if (!symbolsAssigned)
+        throw string("Internal error: Symbol not assigned");
+
     os
         << "/*** AUTO-GENERATED; DO NOT EDIT ***/\n\n"
-           "#ifndef ASP_APP_" << baseName << "_DEF_H\n"
-           "#define ASP_APP_" << baseName << "_DEF_H\n\n"
+           "#ifndef ASP_APP_" << variableBaseName << "_DEF_H\n"
+           "#define ASP_APP_" << variableBaseName << "_DEF_H\n\n"
            "#include <asp.h>\n\n"
            "#ifdef __cplusplus\n"
            "extern \"C\" {\n"
            "#endif\n\n"
-           "extern AspAppSpec AspAppSpec_" << baseName << ";\n\n";
+           "extern AspAppSpec AspAppSpec_" << variableBaseName << ";\n\n";
 
     // Write symbol macro definitions.
-    for (auto iter = symbolTable.Begin();
-         iter != symbolTable.End(); iter++)
+    for (auto iter = symbolTable.Begin(); iter != symbolTable.End(); iter++)
     {
         const auto &name = iter->first;
         const auto &symbol = iter->second;
 
         os
-            << "#define ASP_APP_" << baseName << "_SYM_" << name
+            << "#define ASP_APP_" << variableBaseName << "_SYM_" << name
             << ' ' << symbol << '\n';
     }
 
     // Write application function declarations.
     set<string> functionInternalNames;
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &definition = definitionEntry.second.get();
             const auto functionDefinition =
@@ -207,6 +215,9 @@ void Generator::WriteApplicationHeader(ostream &os) const
 
 void Generator::WriteApplicationCode(ostream &os) const
 {
+    if (!symbolsAssigned)
+        throw string("Internal error: Symbol not assigned");
+
     static string engineAppSpec1EngineVersion = "1.2.3.0";
     static string engineAppSpec1EngineVersionHex = "0x01020300";
     static string engineAppSpec1EngineVersionGoodCheck =
@@ -216,7 +227,7 @@ void Generator::WriteApplicationCode(ostream &os) const
 
     os
         << "/*** AUTO-GENERATED; DO NOT EDIT ***/\n\n"
-           "#include \"" << baseFileName << ".h\"\n"
+           "#include \"" << fileBaseName << ".h\"\n"
            "#include <stdint.h>\n";
 
     // Write a minimum engine version check if applicable.
@@ -231,7 +242,7 @@ void Generator::WriteApplicationCode(ostream &os) const
 
     // Write the dispatch function.
     os
-        << "\nstatic AspRunResult AspDispatch_" << baseName
+        << "\nstatic AspRunResult AspDispatch_" << variableBaseName
         << "\n    (AspEngine *engine,\n";
     if (engineAppSpecVersion == 0)
         os << "     " << engineAppSpec1EngineVersionGoodCheck << '\n';
@@ -247,9 +258,9 @@ void Generator::WriteApplicationCode(ostream &os) const
     os
         << "    switch (moduleSymbol)\n"
            "    {\n";
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        const auto &moduleName = definitionMap.first;
+        const auto &moduleName = moduleEntry.second.moduleName;
         auto moduleSymbol = -moduleIdTable.Symbol
             (moduleName.empty() ? AspSystemModuleName : moduleName);
 
@@ -258,9 +269,11 @@ void Generator::WriteApplicationCode(ostream &os) const
             os << "    #endif\n";
         os
             << "            switch (functionSymbol)\n"
-               "            {\n";
+               "            {\n"
+               "                default:\n"
+               "                    break;\n";
 
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &name = definitionEntry.first;
             const auto &definition = definitionEntry.second.get();
@@ -350,7 +363,7 @@ void Generator::WriteApplicationCode(ostream &os) const
 
     // Write the application specification structure.
     os
-        << "\nAspAppSpec AspAppSpec_" << baseName << " =\n"
+        << "\nAspAppSpec AspAppSpec_" << variableBaseName << " =\n"
            "{";
     unsigned specByteCount = 0;
     if (engineAppSpecVersion >= 1u)
@@ -359,33 +372,29 @@ void Generator::WriteApplicationCode(ostream &os) const
         specByteCount += 2;
         WriteStringEscapedHex(os, engineAppSpecVersion);
         specByteCount += sizeof engineAppSpecVersion;
-        auto moduleCount = static_cast<uint32_t>(definitions.size()) - 1u;
+        auto moduleCount = static_cast<uint32_t>
+            (definitionsByModuleKey.size()) - 1u;
         WriteStringEscapedHex(os, moduleCount);
         specByteCount += sizeof moduleCount;
         os << '"';
     }
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        const auto &moduleName = definitionMap.first;
+        const auto &moduleName = moduleEntry.second.moduleName;
 
         // Write a module entry if applicable.
         if (!moduleName.empty())
         {
             os << "\n    \"";
 
-            // Write the symbol for this module entry.
-            auto moduleSymbol = -moduleIdTable.Symbol(moduleName);
-            WriteStringEscapedHex
-                (os, *reinterpret_cast<uint32_t *>(&moduleSymbol));
-            specByteCount += sizeof moduleSymbol;
-
+            // Write the module entry prefix.
             WriteStringEscapedHex
                 (os, static_cast<uint8_t>(AppSpecPrefix_Module));
             specByteCount++;
             os << '"';
         }
 
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &name = definitionEntry.first;
             const auto &definition = definitionEntry.second.get();
@@ -396,24 +405,29 @@ void Generator::WriteApplicationCode(ostream &os) const
             const auto functionDefinition =
                 dynamic_cast<const FunctionDefinition *>(definition);
 
-            os << "\n    \"";
+            // Skip symbol assignments when writing engine app spec version 1
+            // and greater.
+            if (engineAppSpecVersion >= 1u && assignment != nullptr &&
+                assignment->Value() == nullptr)
+                continue;
 
-            // Write the symbol for this entry if applicable.
-            if (engineAppSpecVersion >= 1u)
-            {
-                auto nameSymbol = symbolTable.Symbol(name);
-                WriteStringEscapedHex
-                    (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
-                specByteCount += sizeof nameSymbol;
-            }
+            os << "\n    \"";
 
             // Write the rest of the entry.
             if (moduleImport != nullptr)
             {
+                // Write the entry prefix.
                 WriteStringEscapedHex
                     (os, static_cast<uint8_t>(AppSpecPrefix_Import));
                 specByteCount++;
 
+                // Write the import symbol.
+                auto nameSymbol = symbolTable.Symbol(name);
+                WriteStringEscapedHex
+                    (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
+                specByteCount += sizeof nameSymbol;
+
+                // Write the module identifier.
                 auto moduleSymbol = -moduleIdTable.Symbol
                     (moduleImport->ModuleName());
                 WriteStringEscapedHex
@@ -423,6 +437,8 @@ void Generator::WriteApplicationCode(ostream &os) const
             else if (assignment != nullptr)
             {
                 const auto &value = assignment->Value();
+
+                // Write the entry prefix.
                 WriteStringEscapedHex
                     (os,
                      static_cast<uint8_t>
@@ -430,6 +446,16 @@ void Generator::WriteApplicationCode(ostream &os) const
                          AppSpecPrefix_Symbol : AppSpecPrefix_Variable));
                 specByteCount++;
 
+                // Write the variable's symbol if applicable.
+                if (engineAppSpecVersion >= 1u)
+                {
+                    auto nameSymbol = symbolTable.Symbol(name);
+                    WriteStringEscapedHex
+                        (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
+                    specByteCount += sizeof nameSymbol;
+                }
+
+                // Write the assigned value if applicable.
                 if (value != nullptr)
                     WriteValue(os, &specByteCount, *value);
             }
@@ -437,36 +463,53 @@ void Generator::WriteApplicationCode(ostream &os) const
             {
                 auto &parameters = functionDefinition->Parameters();
 
+                // Write the entry prefix and/or parameter count.
                 auto parameterCount = parameters.ParametersSize();
                 if (parameterCount > static_cast<size_t>
                     (AppSpecPrefix_MaxFunctionParameterCount))
                 {
+                    // Write the entry prefix separately.
                     WriteStringEscapedHex
                         (os, static_cast<uint8_t>(AppSpecPrefix_Function));
                     specByteCount++;
 
+                    // Write a 4-byte parameter count.
                     WriteStringEscapedHex
                         (os, static_cast<uint32_t>(parameterCount));
                     specByteCount += 4;
                 }
                 else
                 {
+                    // Write a single-byte parameter count which stands in for
+                    // the entry prefix.
                     WriteStringEscapedHex
                         (os, static_cast<uint8_t>(parameterCount));
                     specByteCount++;
                 }
 
+                // Write the function's symbol if applicable.
+                if (engineAppSpecVersion >= 1u)
+                {
+                    auto nameSymbol = symbolTable.Symbol(name);
+                    WriteStringEscapedHex
+                        (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
+                    specByteCount += sizeof nameSymbol;
+                }
+
+                // Write the function's parameter specifications.
                 for (auto parameterIter = parameters.ParametersBegin();
                      parameterIter != parameters.ParametersEnd();
                      parameterIter++)
                 {
                     const auto &parameter = **parameterIter;
 
+                    // Prepare to write the parameter symbol.
                     int32_t parameterSymbol = symbolTable.Symbol
                         (parameter.Name());
                     auto word = *reinterpret_cast<uint32_t *>
                         (&parameterSymbol);
 
+                    // Add any applicable flags to the parameter symbol word.
                     uint32_t parameterType = 0;
                     const auto &defaultValue = parameter.DefaultValue();
                     if (defaultValue != nullptr)
@@ -477,9 +520,11 @@ void Generator::WriteApplicationCode(ostream &os) const
                         parameterType = AppSpecParameterType_DictionaryGroup;
                     word |= parameterType << AspWordBitSize;
 
+                    // Write the parameter symbol and flags.
                     WriteStringEscapedHex(os, word);
                     specByteCount += sizeof word;
 
+                    // Write the parameter's default value if applicable.
                     if (defaultValue != nullptr)
                         WriteValue(os, &specByteCount, *defaultValue);
                 }
@@ -496,7 +541,7 @@ void Generator::WriteApplicationCode(ostream &os) const
             << ",\n    " << specByteCount
             << hex << uppercase << setprecision(4) << setfill('0')
             << ", 0x" << setw(4) << CheckValue() << dec
-            << ", AspDispatch_" << baseName << "\n"
+            << ", AspDispatch_" << variableBaseName << "\n"
                "};\n";
 
         os.flags(oldFlags);
@@ -506,21 +551,18 @@ void Generator::WriteApplicationCode(ostream &os) const
 
 uint32_t Generator::CheckValue() const
 {
-    if (!checkValueComputed)
-    {
-        checkValue = ComputeCheckValue();
-        checkValueComputed = true;
-    }
+    if (!finalized)
+        throw string("Internal error: Check value not computed");
     return checkValue;
 }
 
 uint32_t Generator::ComputeCheckValue() const
 {
     // Use CRC-32/ISO-HDLC for computing a check value.
-    const auto spec = crc_make_spec
+    const auto crcSpec = crc_make_spec
         (32, 0x04C11DB7, 0xFFFFFFFF, true, true, 0xFFFFFFFF);
-    crc_session_t session;
-    crc_start(&spec, &session);
+    crc_session_t crcSession;
+    crc_start(&crcSpec, &crcSession);
 
     // Contribute each definition to the check value.
     static const string
@@ -529,23 +571,28 @@ uint32_t Generator::ComputeCheckValue() const
         CheckValueVariablePrefix = "\v",
         CheckValueFunctionPrefix = "\f",
         CheckValueParameterPrefix = "(";
-    for (const auto &definitionMap: definitions)
+    for (const auto &moduleEntry: definitionsByModuleKey)
     {
-        const auto &moduleName = definitionMap.first;
+        const auto &moduleKey = moduleEntry.first;
 
-        // Contribute the module name.
-        if (!moduleName.empty())
+        // For imported modules, contribute the import names that make up the
+        // module key, each terminated by a null byte.
+        if (!moduleKey.empty())
         {
             crc_add
-                (&spec, &session,
+                (&crcSpec, &crcSession,
                  CheckValueModulePrefix.c_str(),
                  static_cast<unsigned>(CheckValueModulePrefix.size()));
+        }
+        for (const auto &importName: moduleKey)
+        {
             crc_add
-                (&spec, &session,
-                 moduleName.c_str(), static_cast<unsigned>(moduleName.size()));
+                (&crcSpec, &crcSession,
+                 importName.c_str(), static_cast<unsigned>(importName.size()));
+            crc_add(&crcSpec, &crcSession, "", 1);
         }
 
-        for (const auto &definitionEntry: definitionMap.second)
+        for (const auto &definitionEntry: *moduleEntry.second.definitions)
         {
             const auto &name = definitionEntry.first;
             const auto &definition = definitionEntry.second.get();
@@ -558,52 +605,46 @@ uint32_t Generator::ComputeCheckValue() const
 
             if (moduleImport != nullptr)
             {
-                const auto &moduleName = moduleImport->ModuleName();
-
-                // Contribute the import and module names.
+                // Contribute the import name.
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      CheckValueImportPrefix.c_str(),
                      static_cast<unsigned>
                          (CheckValueImportPrefix.size()));
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      name.c_str(), static_cast<unsigned>(name.size()));
-                crc_add
-                    (&spec, &session,
-                     moduleName.c_str(),
-                     static_cast<unsigned>(moduleName.size()));
             }
             else if (assignment != nullptr)
             {
                 const auto &value = assignment->Value();
 
-                // Contribute the variable name.
+                // Contribute the variable/symbol name.
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      CheckValueVariablePrefix.c_str(),
                      static_cast<unsigned>(CheckValueVariablePrefix.size()));
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      name.c_str(), static_cast<unsigned>(name.size()));
 
-                // Contribute the variable value if applicable.
+                // Contribute the variable's value if applicable.
                 if (value != nullptr)
-                    ContributeValue(spec, session, *value);
+                    ContributeValue(crcSpec, crcSession, *value);
             }
             else if (functionDefinition != nullptr)
             {
                 // Contribute the function name.
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      CheckValueFunctionPrefix.c_str(),
                      static_cast<unsigned>(CheckValueFunctionPrefix.size()));
                 crc_add
-                    (&spec, &session,
+                    (&crcSpec, &crcSession,
                      name.c_str(), static_cast<unsigned>(name.size()));
 
+                // Contribute the function parameters.
                 const auto &parameters = functionDefinition->Parameters();
-
                 for (auto parameterIter = parameters.ParametersBegin();
                      parameterIter != parameters.ParametersEnd();
                      parameterIter++)
@@ -613,26 +654,26 @@ uint32_t Generator::ComputeCheckValue() const
 
                     // Contribute the parameter name.
                     crc_add
-                        (&spec, &session,
+                        (&crcSpec, &crcSession,
                          CheckValueParameterPrefix.c_str(),
                          static_cast<unsigned>
                             (CheckValueParameterPrefix.size()));
                     crc_add
-                        (&spec, &session,
+                        (&crcSpec, &crcSession,
                          parameterName.c_str(),
                          static_cast<unsigned>(parameterName.size()));
 
                     // Contribute the default value if present.
                     const auto &defaultValue = parameter.DefaultValue();
                     if (defaultValue != nullptr)
-                        ContributeValue(spec, session, *defaultValue);
+                        ContributeValue(crcSpec, crcSession, *defaultValue);
                 }
             }
             else
                 throw string("Internal error");
         }
     }
-    return static_cast<uint32_t>(crc_finish(&spec, &session));
+    return static_cast<uint32_t>(crc_finish(&crcSpec, &crcSession));
 }
 
 static void WriteValue
@@ -694,18 +735,19 @@ static void WriteValue
 }
 
 static void ContributeValue
-    (const crc_spec_t &spec, crc_session_t &session, const Literal &literal)
+    (const crc_spec_t &crcSpec, crc_session_t &crcSession,
+     const Literal &literal)
 {
     auto valueType = literal.GetType();
     auto b = static_cast<uint8_t>(valueType);
-    crc_add(&spec, &session, &b, 1);
+    crc_add(&crcSpec, &crcSession, &b, 1);
 
     switch (valueType)
     {
         case AppSpecValueType_Boolean:
         {
             uint8_t b = literal.BooleanValue() ? 1 : 0;
-            crc_add(&spec, &session, &b, 1);
+            crc_add(&crcSpec, &crcSession, &b, 1);
             break;
         }
 
@@ -717,7 +759,7 @@ static void ContributeValue
             {
                 uint8_t b =
                     uValue >> 8 * (sizeof value - 1 - i) & 0xFF;
-                crc_add(&spec, &session, &b, 1);
+                crc_add(&crcSpec, &crcSession, &b, 1);
             }
             break;
         }
@@ -732,7 +774,7 @@ static void ContributeValue
             for (unsigned i = 0; i < sizeof value; i++)
             {
                 auto b = data[be ? i : sizeof value - 1 - i];
-                crc_add(&spec, &session, &b, 1);
+                crc_add(&crcSpec, &crcSession, &b, 1);
             }
             break;
         }
@@ -740,7 +782,7 @@ static void ContributeValue
         case AppSpecValueType_String:
         {
             const auto &s = literal.StringValue();
-            crc_add(&spec, &session, s.c_str(), s.size());
+            crc_add(&crcSpec, &crcSession, s.c_str(), s.size());
         }
     }
 }

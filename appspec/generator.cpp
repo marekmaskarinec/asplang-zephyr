@@ -15,31 +15,55 @@ using namespace std;
 
 Generator::Generator
     (ostream &errorStream,
-     const string &baseFileName) :
+     const string &fileBaseName) :
     errorStream(errorStream),
-    symbolTable(true),
+    fileBaseName(fileBaseName),
+    variableBaseName(fileBaseName),
     moduleIdTable(false),
-    baseFileName(baseFileName),
-    baseName(baseFileName)
+    symbolTable(true)
 {
     // Reserve module ID zero for the system module.
     moduleIdTable.Symbol(AspSystemModuleName);
 
     // Deal with invalid variable name characters in the file name.
-    for (string::iterator si = baseName.begin();
-         si != baseName.end();
+    for (string::iterator si = variableBaseName.begin();
+         si != variableBaseName.end();
          si++)
     {
         auto c = *si;
         if (!isalnum(c) && c != '_')
             *si = '_';
     }
+}
 
-    // Create a space for the system module. Note that an empty string is used
-    // as the key rather than the name 'sys' so that this will be the first
-    // entry, and therefore be written first to the compiler spec.
-    currentModuleDefinitions = &definitions.emplace
-        ("", map<string, shared_ptr<NonTerminal> >()).first->second;
+void Generator::AddModule(const string &moduleName)
+{
+    // Add the module only if it has never been added before.
+    auto iter = moduleNames.find(moduleName);
+    if (iter == moduleNames.end())
+    {
+        moduleNames.insert(moduleName);
+        moduleNamesToImport.push_back(moduleName);
+    }
+}
+
+std::string Generator::NextModule()
+{
+    // Check if there are any more modules to import.
+    if (moduleNamesToImport.empty())
+    {
+        currentModuleName.clear();
+        return "";
+    }
+
+    // Switch to the next module.
+    auto moduleName = moduleNamesToImport.front();
+    currentModuleName = definitionsByModuleName.empty() ?  "" : moduleName;
+    moduleNamesToImport.pop_front();
+    currentModuleDefinitions = definitionsByModuleName.emplace
+        (currentModuleName, new map<string, shared_ptr<NonTerminal> >)
+        .first->second;
+    return moduleName;
 }
 
 unsigned Generator::ErrorCount() const
@@ -47,17 +71,94 @@ unsigned Generator::ErrorCount() const
     return errorCount;
 }
 
+void Generator::Finalize()
+{
+    // Discard module names as they are no longer needed.
+    moduleNames.clear();
+
+    // Reorganize modules into a well-defined order that does not depend on
+    // the module names, but rather the set of associated import names,
+    // dropping any modules that have no remaining imports due to deletions or
+    // replacements.
+    for (const auto &moduleEntry: definitionsByModuleName)
+    {
+        const auto &moduleName = moduleEntry.first;
+
+        const auto importedModuleIter = importedModules.find(moduleName);
+        size_t keyCount =
+            importedModuleIter == importedModules.end() ?
+            0 : importedModuleIter->second.imports->size();
+        if (keyCount == 0 && !moduleName.empty())
+            continue;
+
+        // Create a unique module key comprised of all its import names.
+        set<string> moduleKey;
+        if (keyCount != 0)
+        {
+            for (const auto &importEntry: *importedModuleIter->second.imports)
+                moduleKey.emplace(importEntry.first);
+        }
+
+        // Copy the module's definitions.
+        definitionsByModuleKey.emplace
+            (moduleKey, ModuleDefinitionsInfo(moduleName, moduleEntry.second));
+    }
+
+    // Set the app spec format versions to support app modules if required.
+    if (definitionsByModuleKey.size() > 1u)
+    {
+        if (compilerAppSpecVersion < 2u)
+            compilerAppSpecVersion = 2u;
+        if (engineAppSpecVersion < 1u)
+            engineAppSpecVersion = 1u;
+    }
+
+    // Perform a final pass over all the modules and their definitions.
+    for (const auto &moduleEntry: definitionsByModuleKey)
+    {
+        // Assign a module identifier.
+        moduleIdTable.Symbol
+            (moduleEntry.first.empty() ?
+             AspSystemModuleName : moduleEntry.second.moduleName);
+
+        // Set the required engine spec format to support functions with a
+        // large number of parameters if necessary.
+        if (engineAppSpecVersion < 1u)
+        {
+            for (const auto &definitionEntry: *moduleEntry.second.definitions)
+            {
+                const auto definition = definitionEntry.second.get();
+                const auto functionDefinition =
+                    dynamic_cast<const FunctionDefinition *>(definition);
+                if (functionDefinition != nullptr &&
+                    functionDefinition->Parameters().ParametersSize()
+                    > AppSpecPrefix_MaxFunctionParameterCount)
+                {
+                    engineAppSpecVersion = 1u;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Discard data that is no longer needed.
+    importedModules.clear();
+    definitionsByModuleName.clear();
+
+    // Compute the CRC.
+    checkValue = ComputeCheckValue();
+
+    finalized = true;
+}
+
 void Generator::CurrentSource
     (const string &sourceFileName,
-     const string &moduleName,
      bool newFile, bool isLibrary,
      const SourceLocation &sourceLocation)
 {
     this->newFile = newFile;
     this->isLibrary = isLibrary;
     currentSourceFileName = sourceFileName;
-    currentModuleName = moduleName;
-    currentModuleDefinitions = &definitions.find(moduleName)->second;
     currentSourceLocation = sourceLocation;
 }
 
@@ -139,6 +240,7 @@ DEFINE_ACTION
         ReportError("lib must be the first statement");
         return nullptr;
     }
+    newFile = false;
 
     isLibrary = true;
     return nullptr;
@@ -148,6 +250,21 @@ DEFINE_ACTION
     (IncludeHeader, NonTerminal *, Token *, includeNameToken)
 {
     newFile = false;
+
+    if (includeNameToken->s.empty())
+    {
+        ReportError("Include name cannot be empty", *includeNameToken);
+        return nullptr;
+    }
+
+    auto newSourceFileName = includeNameToken->s + ".asps";
+    if (newSourceFileName == currentSourceFileName)
+    {
+        ostringstream oss;
+        oss << "Source file cannot include itself: " << newSourceFileName;
+        ReportError(oss.str(), *includeNameToken);
+        return nullptr;
+    }
 
     // Switch to the new source file.
     currentSourceFileName = includeNameToken->s + ".asps";
@@ -164,6 +281,11 @@ DEFINE_ACTION
 {
     newFile = false;
 
+    if (moduleNameToken->s.empty())
+    {
+        ReportError("Module name cannot be empty", *moduleNameToken);
+        return nullptr;
+    }
     if (CheckReservedNameError(*asNameToken))
         return nullptr;
 
@@ -171,11 +293,11 @@ DEFINE_ACTION
     // different module.
     auto findImportIter = imports.find(asNameToken->s);
     if (findImportIter != imports.end() &&
-        moduleNameToken->s != findImportIter->second)
+        moduleNameToken->s != findImportIter->second.first)
     {
         ostringstream oss;
         oss
-            << "Import module '" << findImportIter->second
+            << "Import module '" << findImportIter->second.first
             << "' previously imported as '" << asNameToken->s
             << "'; cannot also import module '" << moduleNameToken->s
             << "' as '" << asNameToken->s << '\'';
@@ -183,44 +305,29 @@ DEFINE_ACTION
         return nullptr;
     }
 
-    // Replace any previous definition having the same name with this
-    // latter one.
-    auto findModuleIter = currentModuleDefinitions->find(asNameToken->s);
-    if (findModuleIter != currentModuleDefinitions->end())
-    {
-        ostringstream oss;
-        oss << asNameToken->s << " redefined";
-        ReportWarning(oss.str(), *asNameToken);
-        currentModuleDefinitions->erase(findModuleIter);
-        imports.erase(asNameToken->s);
-    }
+    // Replace any previous definition having the same name with this one.
+    ClearDefinition(asNameToken->s, *asNameToken);
 
-    // Add the import definition.
-    currentModuleDefinitions->emplace
-        (asNameToken->s, new Import(*moduleNameToken));
-    imports.emplace(asNameToken->s, moduleNameToken->s);
-    checkValueComputed = false;
+    // Add the import definition to the current module.
+    auto importStatement = currentModuleDefinitions->emplace
+        (asNameToken->s, new Import(*moduleNameToken)).first->second;
 
-    // Set the required app spec formats to support app modules.
-    if (compilerAppSpecVersion < 2u)
-        compilerAppSpecVersion = 2u;
-    if (engineAppSpecVersion < 1u)
-        engineAppSpecVersion = 1u;
+    // Add the import to the global collection of import names, associating it
+    // with the referenced module, or update its use count.
+    auto globalImportIter = imports.emplace
+        (asNameToken->s, make_pair(moduleNameToken->s, 0)).first;
+    globalImportIter->second.second++;
 
-    // Check if the module has been imported elsewhere.
-    auto findModuleDefinitionIter = definitions.find(moduleNameToken->s);
-    if (findModuleDefinitionIter == definitions.end())
-    {
-        // Switch to the new source file.
-        currentSourceFileName = moduleNameToken->s + ".asps";
-        currentSourceLocation = moduleNameToken->sourceLocation;
+    // Add the import to the collection of imports for the referenced module,
+    // or update its use count.
+    auto importedModuleIter = importedModules.emplace
+        (moduleNameToken->s, ImportedModuleInfo()).first;
+    auto moduleImportIter = importedModuleIter->second.imports->emplace
+        (asNameToken->s, 0).first;
+    moduleImportIter->second++;
 
-        // Switch to the new module import.
-        currentModuleName = moduleNameToken->s;
-        currentModuleDefinitions = &definitions.emplace
-            (currentModuleName, map<string, shared_ptr<NonTerminal> >())
-            .first->second;
-    }
+    // Add the module.
+    AddModule(moduleNameToken->s);
 
     currentSourceLocation = asNameToken->sourceLocation;
 
@@ -240,21 +347,12 @@ DEFINE_ACTION
     if (CheckReservedNameError(*nameToken))
         return nullptr;
 
-    // Replace any previous definition having the same name with this
-    // latter one.
-    auto findIter = currentModuleDefinitions->find(nameToken->s);
-    if (findIter != currentModuleDefinitions->end())
-    {
-        ostringstream oss;
-        oss << nameToken->s << " redefined";
-        ReportWarning(oss.str(), *nameToken);
-        currentModuleDefinitions->erase(findIter);
-    }
+    // Replace any previous definition having the same name with this one.
+    ClearDefinition(nameToken->s, *nameToken);
 
-    // Add the assignment definition.
+    // Add the assignment definition to the current module.
     currentModuleDefinitions->emplace
         (nameToken->s, new Assignment(*nameToken, value));
-    checkValueComputed = false;
 
     currentSourceLocation = nameToken->sourceLocation;
 
@@ -312,28 +410,14 @@ DEFINE_ACTION
             ReportError(error, parameter);
     }
 
-    auto parameterCount = parameterList->ParametersSize();
-    if (parameterCount > AppSpecPrefix_MaxFunctionParameterCount &&
-        engineAppSpecVersion < 1u)
-        engineAppSpecVersion = 1u;
+    // Replace any previous definition having the same name with this one.
+    ClearDefinition(nameToken->s, *nameToken);
 
-    // Replace any previous definition having the same name with this
-    // latter one.
-    auto findIter = currentModuleDefinitions->find(nameToken->s);
-    if (findIter != currentModuleDefinitions->end())
-    {
-        ostringstream oss;
-        oss << nameToken->s << " redefined";
-        ReportWarning(oss.str(), *nameToken);
-        currentModuleDefinitions->erase(findIter);
-    }
-
-    // Add the function definition.
+    // Add the function definition to the current module.
     currentModuleDefinitions->emplace
         (nameToken->s, new FunctionDefinition
             (*nameToken, isLibrary,
              *internalNameToken, parameterList));
-    checkValueComputed = false;
 
     currentSourceLocation = nameToken->sourceLocation;
 
@@ -352,7 +436,8 @@ DEFINE_ACTION
     {
         const auto &name = *iter;
 
-        auto findIter = currentModuleDefinitions->find(name);
+        // Ensure the name exists in the current module.
+        const auto findIter = currentModuleDefinitions->find(name);
         if (findIter == currentModuleDefinitions->end())
         {
             ostringstream oss;
@@ -361,7 +446,8 @@ DEFINE_ACTION
             continue;
         }
 
-        currentModuleDefinitions->erase(findIter);
+        // Drop the definition from the current module.
+        ClearDefinition(name, *nameList, false);
     }
 
     return nullptr;
@@ -467,6 +553,80 @@ DEFINE_UTIL(ReportWarning, void, const char *, error)
 DEFINE_UTIL(ReportError, void, const char *, error)
 {
      ReportError(string(error));
+}
+
+void Generator::ClearDefinition
+    (const string &name, const SourceElement &sourceElement, bool warn)
+{
+    auto findDefinitionIter = currentModuleDefinitions->find(name);
+    if (findDefinitionIter == currentModuleDefinitions->end())
+        return;
+
+    auto &definition = findDefinitionIter->second;
+    auto moduleImport = dynamic_cast<Import *>(definition.get());
+    if (moduleImport != nullptr)
+    {
+        // Update all references to the import name by decrementing use counts
+        // and dropping references if their use counts drops to zero.
+        auto importIter = imports.find(name);
+        if (importIter == imports.end())
+        {
+            ostringstream oss;
+            oss
+                << "Internal error: Deleting import \"" << name
+                << "\", import name not found";
+            ReportError(oss.str(), sourceElement);
+            return;
+        }
+        auto importedModuleIter = importedModules.find
+            (importIter->second.first);
+        auto &globalUseCount = importIter->second.second;
+        if (importedModuleIter == importedModules.end())
+        {
+            ostringstream oss;
+            oss
+                << "Internal error: Deleting import \"" << name
+                << "\", module not found";
+            ReportError(oss.str(), sourceElement);
+            return;
+        }
+        auto &referencedImports = importedModuleIter->second.imports;
+        auto referencedImportIter = referencedImports->find(name);
+        if (referencedImportIter == referencedImports->end())
+        {
+            ostringstream oss;
+            oss
+                << "Internal error: Deleting import \"" << name
+                << "\", referenced import not found";
+            ReportError(oss.str(), sourceElement);
+            return;
+        }
+        auto &localUseCount = referencedImportIter->second;
+        if (localUseCount == 0)
+        {
+            ostringstream oss;
+            oss
+                << "Internal error: Deleting import \"" << name
+                << "\", use count is already zero";
+            ReportError(oss.str(), sourceElement);
+            return;
+        }
+        if (--localUseCount == 0)
+            referencedImports->erase(referencedImportIter);
+        if (--globalUseCount == 0)
+            imports.erase(importIter);
+    }
+
+    // Issue a warning if applicable.
+    if (warn)
+    {
+        ostringstream oss;
+        oss << name << " redefined";
+        ReportWarning(oss.str(), sourceElement);
+    }
+
+    // Drop the definition from the current module.
+    currentModuleDefinitions->erase(findDefinitionIter);
 }
 
 bool Generator::CheckReservedNameError(const Token &nameToken)

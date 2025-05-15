@@ -421,7 +421,7 @@ static int main1(int argc, char **argv)
         return 2;
     }
 
-    // Predefine symbols for main module and application functions.
+    // Prepare to process the top-level source file.
     SymbolTable symbolTable;
     Executable executable(symbolTable);
     Compiler compiler(cerr, symbolTable, executable);
@@ -440,21 +440,22 @@ static int main1(int argc, char **argv)
     if (searchPath.empty())
         searchPath.emplace_back();
 
-    // Compile main module and any other modules that are imported.
+    // Compile the main module and any other modules that are imported.
     bool errorDetected = compiler.ErrorCount() > 0;
     while (!errorDetected)
     {
+        // Obtain the next module to process.
         string moduleName = compiler.NextModule();
         if (moduleName.empty())
             break;
         static string sourceSuffix = ".asp";
         string moduleFileName = moduleName + sourceSuffix;
 
-        // Open module file.
+        // Open the module file.
         auto moduleStream = unique_ptr<istream>();
         if (moduleFileName == mainModuleBaseFileName)
         {
-            // Open specified main module file.
+            // Open the specified main module file.
             auto stream = unique_ptr<istream>
                 (new ifstream(mainModuleFileName));
             if (*stream)

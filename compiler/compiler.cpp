@@ -139,17 +139,16 @@ void Compiler::AddModuleFileName(const string &moduleFileName)
 
 string Compiler::NextModule()
 {
-    string moduleName;
     if (moduleNamesToImport.empty())
         currentModuleName.clear();
     else
     {
+        // Switch to the next module.
         currentModuleName = moduleNamesToImport.front();
         currentModuleSymbol = symbolTable.Symbol(currentModuleName);
         moduleNamesToImport.pop_front();
-        moduleName = currentModuleName;
     }
-    return moduleName;
+    return currentModuleName;
 }
 
 bool Compiler::IsAppModule(const string &moduleName) const
