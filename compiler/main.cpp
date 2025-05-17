@@ -445,7 +445,9 @@ static int main1(int argc, char **argv)
     while (!errorDetected)
     {
         // Obtain the next module to process.
-        string moduleName = compiler.NextModule();
+        auto nextModule = compiler.NextModule();
+        const auto &moduleName = nextModule.first;
+        const auto &sourceReferences = nextModule.second;
         if (moduleName.empty())
             break;
         static string sourceSuffix = ".asp";
@@ -505,9 +507,19 @@ static int main1(int argc, char **argv)
             if (compiler.IsAppModule(moduleName))
                 continue;
 
-            cerr
-                << "Error opening " << moduleFileName
-                << ": " << strerror(errno) << endl;
+            // Report the error for every import statement that references the
+            // module that cannot be opened.
+            for (const auto &sourceReference: sourceReferences)
+            {
+                const auto &sourceLocation = sourceReference.sourceLocation;
+
+                cerr
+                    << sourceLocation.fileName << ':'
+                    << sourceLocation.line << ':'
+                    << sourceLocation.column
+                    << ": Error opening " << moduleFileName
+                    << ": " << strerror(errno) << endl;
+            }
             errorDetected = true;
             break;
         }

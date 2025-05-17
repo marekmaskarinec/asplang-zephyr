@@ -137,7 +137,7 @@ void Compiler::AddModuleFileName(const string &moduleFileName)
     AddModule(moduleName);
 }
 
-string Compiler::NextModule()
+pair<string, list<SourceElement> > Compiler::NextModule()
 {
     if (moduleNamesToImport.empty())
         currentModuleName.clear();
@@ -148,7 +148,17 @@ string Compiler::NextModule()
         currentModuleSymbol = symbolTable.Symbol(currentModuleName);
         moduleNamesToImport.pop_front();
     }
-    return currentModuleName;
+
+    // Gather all the import source locations that reference the module.
+    list<SourceElement> sourceReferences;
+    auto importedModuleIter = importedModules.find(currentModuleName);
+    if (importedModuleIter != importedModules.end())
+    {
+        for (const auto &sourceElement: importedModuleIter->second)
+            sourceReferences.emplace_back(sourceElement);
+    }
+
+    return make_pair(currentModuleName, sourceReferences);
 }
 
 bool Compiler::IsAppModule(const string &moduleName) const
@@ -404,7 +414,12 @@ DEFINE_ACTION
          iter != moduleNameList->NamesEnd(); iter++)
     {
         const auto &importName = *iter;
+
         AddModule(importName->Name());
+
+        auto importedModuleIter = importedModules.emplace
+            (importName->Name(), list<SourceElement>()).first;
+        importedModuleIter->second.push_back(*moduleNameList);
     }
 
     return new ImportStatement(moduleNameList);
@@ -415,6 +430,10 @@ DEFINE_ACTION
      ImportName *, moduleName, ImportNameList *, memberNameList)
 {
     AddModule(moduleName->Name());
+
+    auto importedModuleIter = importedModules.emplace
+        (moduleName->Name(), list<SourceElement>()).first;
+    importedModuleIter->second.push_back(*moduleName);
 
     auto moduleNameList = new ImportNameList;
     moduleNameList->Add(moduleName);

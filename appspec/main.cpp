@@ -321,8 +321,10 @@ static int main1(int argc, char **argv)
     while (!errorDetected)
     {
         // Obtain the next module to process.
-        string moduleName = generator.NextModule();
-        if (moduleName.empty())
+        auto nextModule = generator.NextModule();
+        const auto &moduleName = nextModule.first;
+        const auto &sourceReferences = nextModule.second;
+        if (moduleName.empty() || errorDetected)
             break;
         string moduleFileName = moduleName + sourceSuffix;
 
@@ -347,9 +349,23 @@ static int main1(int argc, char **argv)
         }
         if (moduleStream == nullptr)
         {
-            cerr
-                << "Error opening " << moduleFileName
-                << ": " << strerror(errno) << endl;
+            // Report the error for every import statement that references the
+            // module that cannot be opened.
+            for (const auto &sourceReference: sourceReferences)
+            {
+                const auto &importName = sourceReference.first;
+                const auto &sourceLocation =
+                    sourceReference.second.sourceLocation;
+
+                cerr
+                    << sourceLocation.fileName << ':'
+                    << sourceLocation.line << ':'
+                    << sourceLocation.column
+                    << ": Error opening " << moduleFileName;
+                if (importName != moduleName)
+                    cerr << " imported as '" << importName << '\'';
+                cerr << ": " << strerror(errno) << endl;
+            }
             return 1;
         }
         generator.CurrentSource(moduleFileName);

@@ -39,6 +39,7 @@ class SourceElement
     public:
 
         SourceElement() = default;
+        virtual ~SourceElement() = default;
 
         explicit SourceElement(const SourceLocation &sourceLocation) :
             sourceLocation(sourceLocation)

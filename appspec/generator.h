@@ -12,6 +12,7 @@
 #include "symbol.hpp"
 #include <iostream>
 #include <deque>
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -57,7 +58,13 @@ class Generator
 
         // Generator methods.
         void AddModule(const std::string &);
-        std::string NextModule();
+        std::pair
+            <std::string, // Module name
+             std::list
+                <std::pair
+                    <std::string, // Import name
+                     SourceElement> > >
+            NextModule();
         unsigned ErrorCount() const;
         void Finalize();
 
@@ -80,7 +87,7 @@ class Generator
 
     /* Statements. */
     DECLARE_METHOD
-        (DeclareAsLibrary, NonTerminal *, int)
+        (DeclareAsLibrary, NonTerminal *, Token *)
     DECLARE_METHOD
         (IncludeHeader, NonTerminal *, Token *)
     DECLARE_METHOD
@@ -151,25 +158,22 @@ class Generator
         std::uint32_t ComputeCheckValue() const;
 
         // Internal data structures.
-        struct ImportedModuleInfo
+        struct NameInfo
         {
-            ImportedModuleInfo() :
-                imports(new std::map<std::string, unsigned >)
-            {
-            }
+             NameInfo(unsigned useCount = 0) :
+                 useCount(useCount)
+             {
+             }
 
-            std::shared_ptr
-                <std::map
-                    <std::string, // Import name
-                     unsigned > > // Use count
-                imports;
+             unsigned useCount;
+             std::list<SourceElement> sourceElements;
         };
         struct ModuleDefinitionsInfo
         {
             ModuleDefinitionsInfo
                 (const std::string &moduleName,
-                 std::shared_ptr <std::map
-                    <std::string, std::shared_ptr<NonTerminal> > >
+                 std::shared_ptr<std::map
+                    <std::string, std::shared_ptr<SourceElement> > >
                     definitions) :
                 moduleName(moduleName),
                 definitions(definitions)
@@ -179,8 +183,8 @@ class Generator
             std::string moduleName;
             std::shared_ptr
                 <std::map
-                    <std::string,
-                     std::shared_ptr<NonTerminal> > >
+                    <std::string, // Definition name
+                     std::shared_ptr<SourceElement> > >
                 definitions;
         };
 
@@ -198,7 +202,9 @@ class Generator
         SourceLocation currentSourceLocation;
         std::string currentSourceFileName, currentModuleName;
         std::shared_ptr
-            <std::map<std::string, std::shared_ptr<NonTerminal> > >
+            <std::map
+                <std::string, // Definition name
+                 std::shared_ptr<SourceElement> > >
             currentModuleDefinitions;
         std::set<std::string> moduleNames;
         std::deque<std::string> moduleNamesToImport;
@@ -206,18 +212,20 @@ class Generator
             <std::string, // Import name
              std::pair
                 <std::string, // Module name
-                 unsigned> > // Use count
+                 NameInfo> >
             imports;
         std::map
             <std::string, // Module name
-             ImportedModuleInfo>
+             std::map
+                <std::string, // Import name
+                 NameInfo> >
             importedModules;
         std::map
             <std::string, // Module name
              std::shared_ptr
                 <std::map
                     <std::string, // Definition name
-                     std::shared_ptr<NonTerminal> > > >
+                     std::shared_ptr<SourceElement> > > >
             definitionsByModuleName;
 
         // Code generation data.

@@ -47,13 +47,15 @@ void Generator::AddModule(const string &moduleName)
     }
 }
 
-std::string Generator::NextModule()
+pair<string, list<pair<string, SourceElement> > >
+Generator::NextModule()
 {
     // Check if there are any more modules to import.
     if (moduleNamesToImport.empty())
     {
         currentModuleName.clear();
-        return "";
+        return make_pair
+            ("", list<pair<string, SourceElement> >());
     }
 
     // Switch to the next module.
@@ -61,9 +63,25 @@ std::string Generator::NextModule()
     currentModuleName = definitionsByModuleName.empty() ?  "" : moduleName;
     moduleNamesToImport.pop_front();
     currentModuleDefinitions = definitionsByModuleName.emplace
-        (currentModuleName, new map<string, shared_ptr<NonTerminal> >)
+        (currentModuleName, new map<string, shared_ptr<SourceElement> >)
         .first->second;
-    return moduleName;
+
+    // Gather all the import source locations that reference the module.
+    list<pair<string, SourceElement> > sourceReferences;
+    auto importedModuleIter = importedModules.find(currentModuleName);
+    if (importedModuleIter != importedModules.end())
+    {
+        for (const auto &importEntry: importedModuleIter->second)
+        {
+            const auto &importName = importEntry.first;
+
+            for (const auto &sourceElement: importEntry.second.sourceElements)
+                sourceReferences.emplace_back
+                    (make_pair(importName, sourceElement));
+        }
+    }
+
+    return make_pair(moduleName, sourceReferences);
 }
 
 unsigned Generator::ErrorCount() const
@@ -87,7 +105,7 @@ void Generator::Finalize()
         const auto importedModuleIter = importedModules.find(moduleName);
         size_t keyCount =
             importedModuleIter == importedModules.end() ?
-            0 : importedModuleIter->second.imports->size();
+            0 : importedModuleIter->second.size();
         if (keyCount == 0 && !moduleName.empty())
             continue;
 
@@ -95,7 +113,7 @@ void Generator::Finalize()
         set<string> moduleKey;
         if (keyCount != 0)
         {
-            for (const auto &importEntry: *importedModuleIter->second.imports)
+            for (const auto &importEntry: importedModuleIter->second)
                 moduleKey.emplace(importEntry.first);
         }
 
@@ -232,17 +250,21 @@ SourceLocation Generator::CurrentSourceLocation() const
         (t1 p1, t2 p2, t3 p3)
 
 DEFINE_ACTION
-    (DeclareAsLibrary, NonTerminal *, int, _)
+    (DeclareAsLibrary, NonTerminal *, Token *, commandToken)
 {
     // Allow library declaration only as the first statement.
     if (!newFile)
     {
-        ReportError("lib must be the first statement");
+        ReportError("lib must be the first statement", *commandToken);
         return nullptr;
     }
     newFile = false;
 
     isLibrary = true;
+
+    // Clean up grammar elements.
+    delete commandToken;
+
     return nullptr;
 }
 
@@ -270,6 +292,7 @@ DEFINE_ACTION
     currentSourceFileName = includeNameToken->s + ".asps";
     currentSourceLocation = includeNameToken->sourceLocation;
 
+    // Clean up grammar elements.
     delete includeNameToken;
 
     return nullptr;
@@ -295,13 +318,27 @@ DEFINE_ACTION
     if (findImportIter != imports.end() &&
         moduleNameToken->s != findImportIter->second.first)
     {
+        // Report the error on the line on which it occurs.
         ostringstream oss;
         oss
-            << "Import module '" << findImportIter->second.first
-            << "' previously imported as '" << asNameToken->s
-            << "'; cannot also import module '" << moduleNameToken->s
-            << "' as '" << asNameToken->s << '\'';
+            << "Cannot import module '" << moduleNameToken->s
+            << "' as '" << asNameToken->s << "\' ...";
         ReportError(oss.str(), *asNameToken);
+
+        // Report all the places where the name was previously defined.
+        const auto &previousModuleName = findImportIter->second.first;
+        const auto sourceElements =
+            findImportIter->second.second.sourceElements;
+        for (const auto &sourceElement: sourceElements)
+        {
+            ostringstream oss;
+            oss
+                << "... Module '" << previousModuleName
+                << "' was previously imported as '" << asNameToken->s
+                << "' here";
+            ReportError(oss.str(), sourceElement);
+        }
+
         return nullptr;
     }
 
@@ -316,21 +353,24 @@ DEFINE_ACTION
     // with the referenced module, or update its use count.
     auto globalImportIter = imports.emplace
         (asNameToken->s, make_pair(moduleNameToken->s, 0)).first;
-    globalImportIter->second.second++;
+    globalImportIter->second.second.useCount++;
+    globalImportIter->second.second.sourceElements.push_back(*asNameToken);
 
     // Add the import to the collection of imports for the referenced module,
     // or update its use count.
     auto importedModuleIter = importedModules.emplace
-        (moduleNameToken->s, ImportedModuleInfo()).first;
-    auto moduleImportIter = importedModuleIter->second.imports->emplace
+        (moduleNameToken->s, map<string, NameInfo>()).first;
+    auto moduleImportIter = importedModuleIter->second.emplace
         (asNameToken->s, 0).first;
-    moduleImportIter->second++;
+    moduleImportIter->second.useCount++;
+    moduleImportIter->second.sourceElements.push_back(*asNameToken);
 
     // Add the module.
     AddModule(moduleNameToken->s);
 
     currentSourceLocation = asNameToken->sourceLocation;
 
+    // Clean up grammar elements.
     if (asNameToken != moduleNameToken)
         delete asNameToken;
     delete moduleNameToken;
@@ -356,6 +396,7 @@ DEFINE_ACTION
 
     currentSourceLocation = nameToken->sourceLocation;
 
+    // Clean up grammar elements.
     delete nameToken;
 
     return nullptr;
@@ -400,7 +441,7 @@ DEFINE_ACTION
         }
         if (!typeValid)
         {
-            ReportError("Internal error; unknown parameter type", parameter);
+            ReportError("Internal error: Unknown parameter type", parameter);
             break;
         }
 
@@ -421,6 +462,7 @@ DEFINE_ACTION
 
     currentSourceLocation = nameToken->sourceLocation;
 
+    // Clean up grammar elements.
     delete nameToken;
     delete internalNameToken;
 
@@ -573,46 +615,46 @@ void Generator::ClearDefinition
         {
             ostringstream oss;
             oss
-                << "Internal error: Deleting import \"" << name
-                << "\", import name not found";
+                << "Internal error: Deleting import '" << name
+                << "', import name not found";
             ReportError(oss.str(), sourceElement);
             return;
         }
         auto importedModuleIter = importedModules.find
             (importIter->second.first);
-        auto &globalUseCount = importIter->second.second;
+        auto &globalUseCount = importIter->second.second.useCount;
         if (importedModuleIter == importedModules.end())
         {
             ostringstream oss;
             oss
-                << "Internal error: Deleting import \"" << name
-                << "\", module not found";
+                << "Internal error: Deleting import '" << name
+                << "', module not found";
             ReportError(oss.str(), sourceElement);
             return;
         }
-        auto &referencedImports = importedModuleIter->second.imports;
-        auto referencedImportIter = referencedImports->find(name);
-        if (referencedImportIter == referencedImports->end())
+        auto &referencedImports = importedModuleIter->second;
+        auto referencedImportIter = referencedImports.find(name);
+        if (referencedImportIter == referencedImports.end())
         {
             ostringstream oss;
             oss
-                << "Internal error: Deleting import \"" << name
-                << "\", referenced import not found";
+                << "Internal error: Deleting import '" << name
+                << "', referenced import not found";
             ReportError(oss.str(), sourceElement);
             return;
         }
-        auto &localUseCount = referencedImportIter->second;
+        auto &localUseCount = referencedImportIter->second.useCount;
         if (localUseCount == 0)
         {
             ostringstream oss;
             oss
-                << "Internal error: Deleting import \"" << name
-                << "\", use count is already zero";
+                << "Internal error: Deleting import '" << name
+                << "', use count is already zero";
             ReportError(oss.str(), sourceElement);
             return;
         }
         if (--localUseCount == 0)
-            referencedImports->erase(referencedImportIter);
+            referencedImports.erase(referencedImportIter);
         if (--globalUseCount == 0)
             imports.erase(importIter);
     }
@@ -621,7 +663,7 @@ void Generator::ClearDefinition
     if (warn)
     {
         ostringstream oss;
-        oss << name << " redefined";
+        oss << "Name '" << name << "' redefined";
         ReportWarning(oss.str(), sourceElement);
     }
 

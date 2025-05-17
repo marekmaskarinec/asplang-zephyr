@@ -12,8 +12,11 @@
 #include "symbol.hpp"
 #include <iostream>
 #include <deque>
+#include <list>
+#include <map>
 #include <set>
 #include <string>
+#include <utility>
 #endif
 
 #ifdef __cplusplus
@@ -70,7 +73,10 @@ class Compiler
         void LoadApplicationSpec(std::istream &);
         void AddModule(const std::string &);
         void AddModuleFileName(const std::string &);
-        std::string NextModule();
+        std::pair
+            <std::string, // Module name
+             std::list<SourceElement> >
+            NextModule();
         bool IsAppModule(const std::string &) const;
         unsigned ErrorCount() const;
         void Finalize();
@@ -344,6 +350,12 @@ class Compiler
         SymbolTable &symbolTable;
         Executable &executable;
         Executable::Location topLocation;
+
+        // Import data.
+        std::map
+            <std::string, // Module name
+             std::list<SourceElement> >
+            importedModules;
 
         // Module data.
         std::set<std::string> appModuleNames, moduleNames;
