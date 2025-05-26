@@ -378,6 +378,32 @@ void Generator::WriteApplicationCode(ostream &os) const
         specByteCount += sizeof moduleCount;
         os << '"';
     }
+    for (const auto &importEntry: imports)
+    {
+        const auto &importName = importEntry.first;
+        const auto &moduleName = importEntry.second.first;
+
+        os << "\n    \"";
+
+        // Write the import entry prefix.
+        WriteStringEscapedHex
+            (os, static_cast<uint8_t>(AppSpecPrefix_Import));
+        specByteCount++;
+
+        // Write the import symbol.
+        auto nameSymbol = symbolTable.Symbol(importName);
+        WriteStringEscapedHex
+            (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
+        specByteCount += sizeof nameSymbol;
+
+        // Write the module identifier.
+        auto moduleSymbol = -moduleIdTable.Symbol(moduleName);
+        WriteStringEscapedHex
+            (os, *reinterpret_cast<uint32_t *>(&moduleSymbol));
+        specByteCount += sizeof moduleSymbol;
+
+        os << '"';
+    }
     for (const auto &moduleEntry: definitionsByModuleKey)
     {
         const auto &moduleName = moduleEntry.second.moduleName;
@@ -391,6 +417,7 @@ void Generator::WriteApplicationCode(ostream &os) const
             WriteStringEscapedHex
                 (os, static_cast<uint8_t>(AppSpecPrefix_Module));
             specByteCount++;
+
             os << '"';
         }
 
@@ -398,8 +425,6 @@ void Generator::WriteApplicationCode(ostream &os) const
         {
             const auto &name = definitionEntry.first;
             const auto &definition = definitionEntry.second.get();
-            const auto moduleImport =
-                dynamic_cast<const Import *>(definition);
             const auto assignment =
                 dynamic_cast<const Assignment *>(definition);
             const auto functionDefinition =
@@ -414,31 +439,11 @@ void Generator::WriteApplicationCode(ostream &os) const
             os << "\n    \"";
 
             // Write the rest of the entry.
-            if (moduleImport != nullptr)
-            {
-                // Write the entry prefix.
-                WriteStringEscapedHex
-                    (os, static_cast<uint8_t>(AppSpecPrefix_Import));
-                specByteCount++;
-
-                // Write the import symbol.
-                auto nameSymbol = symbolTable.Symbol(name);
-                WriteStringEscapedHex
-                    (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
-                specByteCount += sizeof nameSymbol;
-
-                // Write the module identifier.
-                auto moduleSymbol = -moduleIdTable.Symbol
-                    (moduleImport->ModuleName());
-                WriteStringEscapedHex
-                    (os, *reinterpret_cast<uint32_t *>(&moduleSymbol));
-                specByteCount += sizeof moduleSymbol;
-            }
-            else if (assignment != nullptr)
+            if (assignment != nullptr)
             {
                 const auto &value = assignment->Value();
 
-                // Write the entry prefix.
+                // Write the assignment entry prefix.
                 WriteStringEscapedHex
                     (os,
                      static_cast<uint8_t>
@@ -463,7 +468,7 @@ void Generator::WriteApplicationCode(ostream &os) const
             {
                 auto &parameters = functionDefinition->Parameters();
 
-                // Write the entry prefix and/or parameter count.
+                // Write the function entry prefix and/or parameter count.
                 auto parameterCount = parameters.ParametersSize();
                 if (parameterCount > static_cast<size_t>
                     (AppSpecPrefix_MaxFunctionParameterCount))
@@ -529,6 +534,7 @@ void Generator::WriteApplicationCode(ostream &os) const
                         WriteValue(os, &specByteCount, *defaultValue);
                 }
             }
+
             os << '"';
         }
     }
@@ -567,7 +573,6 @@ uint32_t Generator::ComputeCheckValue() const
     // Contribute each definition to the check value.
     static const string
         CheckValueModulePrefix = ".",
-        CheckValueImportPrefix = "!",
         CheckValueVariablePrefix = "\v",
         CheckValueFunctionPrefix = "\f",
         CheckValueParameterPrefix = "(";
@@ -596,26 +601,12 @@ uint32_t Generator::ComputeCheckValue() const
         {
             const auto &name = definitionEntry.first;
             const auto &definition = definitionEntry.second.get();
-            const auto moduleImport =
-                dynamic_cast<const Import *>(definition);
             const auto assignment =
                 dynamic_cast<const Assignment *>(definition);
             const auto functionDefinition =
                 dynamic_cast<const FunctionDefinition *>(definition);
 
-            if (moduleImport != nullptr)
-            {
-                // Contribute the import name.
-                crc_add
-                    (&crcSpec, &crcSession,
-                     CheckValueImportPrefix.c_str(),
-                     static_cast<unsigned>
-                         (CheckValueImportPrefix.size()));
-                crc_add
-                    (&crcSpec, &crcSession,
-                     name.c_str(), static_cast<unsigned>(name.size()));
-            }
-            else if (assignment != nullptr)
+            if (assignment != nullptr)
             {
                 const auto &value = assignment->Value();
 

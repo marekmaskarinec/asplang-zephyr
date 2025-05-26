@@ -11,22 +11,6 @@
 #include <list>
 #include <string>
 
-class Import : public NonTerminal
-{
-    public:
-
-        explicit Import(const Token &moduleName);
-
-        const std::string &ModuleName() const
-        {
-            return moduleName;
-        }
-
-    private:
-
-        std::string moduleName;
-};
-
 class Assignment : public NonTerminal
 {
     public:

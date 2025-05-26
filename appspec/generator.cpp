@@ -309,7 +309,8 @@ DEFINE_ACTION
         ReportError("Module name cannot be empty", *moduleNameToken);
         return nullptr;
     }
-    if (CheckReservedNameError(*asNameToken))
+    if (CheckReservedNameError(*moduleNameToken) ||
+        CheckReservedNameError(*asNameToken))
         return nullptr;
 
     // Ensure the import name has not been previously associated with a
@@ -341,13 +342,6 @@ DEFINE_ACTION
 
         return nullptr;
     }
-
-    // Replace any previous definition having the same name with this one.
-    ClearDefinition(asNameToken->s, *asNameToken);
-
-    // Add the import definition to the current module.
-    auto importStatement = currentModuleDefinitions->emplace
-        (asNameToken->s, new Import(*moduleNameToken)).first->second;
 
     // Add the import to the global collection of import names, associating it
     // with the referenced module, or update its use count.
@@ -384,7 +378,7 @@ DEFINE_ACTION
 {
     newFile = false;
 
-    if (CheckReservedNameError(*nameToken))
+    if (value != nullptr && CheckReservedNameError(*nameToken))
         return nullptr;
 
     // Replace any previous definition having the same name with this one.
@@ -600,64 +594,10 @@ DEFINE_UTIL(ReportError, void, const char *, error)
 void Generator::ClearDefinition
     (const string &name, const SourceElement &sourceElement, bool warn)
 {
+    // Determine whether the name is already defined.
     auto findDefinitionIter = currentModuleDefinitions->find(name);
     if (findDefinitionIter == currentModuleDefinitions->end())
         return;
-
-    auto &definition = findDefinitionIter->second;
-    auto moduleImport = dynamic_cast<Import *>(definition.get());
-    if (moduleImport != nullptr)
-    {
-        // Update all references to the import name by decrementing use counts
-        // and dropping references if their use counts drops to zero.
-        auto importIter = imports.find(name);
-        if (importIter == imports.end())
-        {
-            ostringstream oss;
-            oss
-                << "Internal error: Deleting import '" << name
-                << "', import name not found";
-            ReportError(oss.str(), sourceElement);
-            return;
-        }
-        auto importedModuleIter = importedModules.find
-            (importIter->second.first);
-        auto &globalUseCount = importIter->second.second.useCount;
-        if (importedModuleIter == importedModules.end())
-        {
-            ostringstream oss;
-            oss
-                << "Internal error: Deleting import '" << name
-                << "', module not found";
-            ReportError(oss.str(), sourceElement);
-            return;
-        }
-        auto &referencedImports = importedModuleIter->second;
-        auto referencedImportIter = referencedImports.find(name);
-        if (referencedImportIter == referencedImports.end())
-        {
-            ostringstream oss;
-            oss
-                << "Internal error: Deleting import '" << name
-                << "', referenced import not found";
-            ReportError(oss.str(), sourceElement);
-            return;
-        }
-        auto &localUseCount = referencedImportIter->second.useCount;
-        if (localUseCount == 0)
-        {
-            ostringstream oss;
-            oss
-                << "Internal error: Deleting import '" << name
-                << "', use count is already zero";
-            ReportError(oss.str(), sourceElement);
-            return;
-        }
-        if (--localUseCount == 0)
-            referencedImports.erase(referencedImportIter);
-        if (--globalUseCount == 0)
-            imports.erase(importIter);
-    }
 
     // Issue a warning if applicable.
     if (warn)

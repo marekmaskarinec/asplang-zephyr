@@ -614,23 +614,13 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
             if (AspDataGetType(appModule) != DataType_Module)
                 return AspRunResult_InitializationError;
 
-            /* Insert the application module into the current namespace by its
-               import symbol. */
-            AspTreeResult symbolInsertResult = AspTreeTryInsertBySymbol
-                (engine, currentAppNamespace, symbol, appModule);
-            if (symbolInsertResult.result != AspRunResult_OK)
-                return symbolInsertResult.result;
-            if (!symbolInsertResult.inserted)
-                return AspRunResult_InitializationError;
-
             /* Insert the application module into the modules collection by its
-               import symbol if not already done previously. */
+               import symbol. */
             AspTreeResult moduleInsertResult = AspTreeTryInsertBySymbol
                 (engine, engine->modules, symbol, appModule);
             if (moduleInsertResult.result != AspRunResult_OK)
                 return moduleInsertResult.result;
-            AspDataEntry *existingAppModule = moduleInsertResult.value;
-            if (AspDataGetType(existingAppModule) != DataType_Module)
+            if (!moduleInsertResult.inserted)
                 return AspRunResult_InitializationError;
         }
         else if (version >= 1u && prefix == AppSpecPrefix_Function ||
