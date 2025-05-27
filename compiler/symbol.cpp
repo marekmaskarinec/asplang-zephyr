@@ -23,19 +23,6 @@ SymbolTable::SymbolTable(bool reserveSystemSymbols)
 
 int32_t SymbolTable::Symbol(const string &name)
 {
-    // For a temporary, return a new negative symbol.
-    if (name.empty())
-    {
-        if (nextUnnamedSymbol == 0)
-            throw string("Maximum number of temporary symbols exceeded");
-        auto result = nextUnnamedSymbol;
-        if (nextUnnamedSymbol == AspSignedWordMin)
-            nextUnnamedSymbol = 0;
-        else
-            nextUnnamedSymbol--;
-        return result;
-    }
-
     // Return a unique symbol for the given name.
     bool empty = symbolsByName.empty();
     auto result = symbolsByName.insert(make_pair(name, nextNamedSymbol));
@@ -61,6 +48,19 @@ int32_t SymbolTable::Symbol(const string &name) const
         throw oss.str();
     }
     return iter->second;
+}
+
+int32_t SymbolTable::TemporarySymbol()
+{
+    // For a temporary, return a new negative symbol.
+    if (nextUnnamedSymbol == 0)
+        throw string("Maximum number of temporary symbols exceeded");
+    auto result = nextUnnamedSymbol;
+    if (nextUnnamedSymbol == AspSignedWordMin)
+        nextUnnamedSymbol = 0;
+    else
+        nextUnnamedSymbol--;
+    return result;
 }
 
 bool SymbolTable::IsDefined(const string &name) const

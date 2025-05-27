@@ -3,7 +3,6 @@
 //
 
 #include "generator.h"
-#include "symbols.h"
 #include "appspec.h"
 #include "data.h"
 #include "crc.h"
@@ -261,8 +260,7 @@ void Generator::WriteApplicationCode(ostream &os) const
     for (const auto &moduleEntry: definitionsByModuleKey)
     {
         const auto &moduleName = moduleEntry.second.moduleName;
-        auto moduleSymbol = -moduleIdTable.Symbol
-            (moduleName.empty() ? AspSystemModuleName : moduleName);
+        auto moduleSymbol = -moduleIdTable.Symbol(moduleName);
 
         os << "        case " << moduleSymbol << ":\n";
         if (engineAppSpecVersion == 0)

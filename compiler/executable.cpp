@@ -39,7 +39,7 @@ int32_t Executable::Symbol(const string &name) const
 
 int32_t Executable::TemporarySymbol() const
 {
-    return symbolTable.Symbol();
+    return symbolTable.TemporarySymbol();
 }
 
 Executable::Location Executable::Insert

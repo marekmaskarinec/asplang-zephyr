@@ -17,11 +17,13 @@ class SymbolTable
         explicit SymbolTable(bool reserveSystemSymbols = true);
 
         // Symbol fetch method. If not found, the symbol is assigned a value.
-        // If the name is empty, get a new symbol for a temporary.
-        std::int32_t Symbol(const std::string & = "");
+        std::int32_t Symbol(const std::string &);
 
         // Symbol fetch method. If not found, an exception is thrown.
         std::int32_t Symbol(const std::string &) const;
+
+        // Temporary symbol fetch method. A new value is returned each time.
+        std::int32_t TemporarySymbol();
 
         // Symbol check method.
         bool IsDefined(const std::string &) const;

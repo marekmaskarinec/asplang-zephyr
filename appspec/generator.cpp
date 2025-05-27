@@ -23,7 +23,7 @@ Generator::Generator
     symbolTable(true)
 {
     // Reserve module ID zero for the system module.
-    moduleIdTable.Symbol(AspSystemModuleName);
+    moduleIdTable.Symbol("");
 
     // Deal with invalid variable name characters in the file name.
     for (string::iterator si = variableBaseName.begin();
@@ -135,9 +135,7 @@ void Generator::Finalize()
     for (const auto &moduleEntry: definitionsByModuleKey)
     {
         // Assign a module identifier.
-        moduleIdTable.Symbol
-            (moduleEntry.first.empty() ?
-             AspSystemModuleName : moduleEntry.second.moduleName);
+        moduleIdTable.Symbol(moduleEntry.second.moduleName);
 
         // Set the required engine spec format to support functions with a
         // large number of parameters if necessary.
@@ -309,8 +307,7 @@ DEFINE_ACTION
         ReportError("Module name cannot be empty", *moduleNameToken);
         return nullptr;
     }
-    if (CheckReservedNameError(*moduleNameToken) ||
-        CheckReservedNameError(*asNameToken))
+    if (CheckReservedNameError(*asNameToken))
         return nullptr;
 
     // Ensure the import name has not been previously associated with a
