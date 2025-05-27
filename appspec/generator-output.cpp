@@ -388,12 +388,6 @@ void Generator::WriteApplicationCode(ostream &os) const
             (os, static_cast<uint8_t>(AppSpecPrefix_Import));
         specByteCount++;
 
-        // Write the import symbol.
-        auto nameSymbol = symbolTable.Symbol(importName);
-        WriteStringEscapedHex
-            (os, *reinterpret_cast<uint32_t *>(&nameSymbol));
-        specByteCount += sizeof nameSymbol;
-
         // Write the module identifier.
         auto moduleSymbol = -moduleIdTable.Symbol(moduleName);
         WriteStringEscapedHex

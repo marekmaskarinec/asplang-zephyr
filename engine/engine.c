@@ -529,8 +529,8 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
     int32_t nextAppModuleId = 0;
     AspDataEntry *currentAppModule = engine->module;
     AspDataEntry *currentAppNamespace = engine->systemNamespace;
-    for (int32_t version0Symbol = AspScriptSymbolBase;
-         version0Symbol <= AspSignedWordMax; version0Symbol++)
+    for (int32_t nextSymbol = AspScriptSymbolBase;
+         nextSymbol <= AspSignedWordMax; nextSymbol++)
     {
         if (specIndex >= specSize)
             break;
@@ -539,7 +539,7 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
         uint8_t prefix = spec[specIndex++];
 
         /* Determine the entry's symbol. */
-        int32_t symbol = version0Symbol;
+        int32_t symbol = nextSymbol;
         if (version >= 1u)
         {
             /* Ensure a symbol prefix does not appear in a version 1 or greater
@@ -547,9 +547,10 @@ static AspRunResult InitializeAppDefinitions(AspEngine *engine)
             if (prefix == AppSpecPrefix_Symbol)
                 return AspRunResult_InitializationError;
 
-            /* Read a symbol for all entry types except for modules, whose
-               symbols are determined sequentially. */
-            if (prefix != AppSpecPrefix_Module)
+            /* Read a symbol for all entry types except for imports and
+               modules, whose symbols are determined sequentially. */
+            if (prefix != AppSpecPrefix_Import &&
+                prefix != AppSpecPrefix_Module)
             {
                 AspRunResult result = LoadSignedInteger
                     (spec, specSize, &specIndex, &symbol);
