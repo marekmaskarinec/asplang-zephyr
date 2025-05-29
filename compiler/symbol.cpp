@@ -4,7 +4,7 @@
 
 #include "symbol.hpp"
 #include "symbols.h"
-#include "data.h"
+#include "word.h"
 #include <sstream>
 #include <utility>
 

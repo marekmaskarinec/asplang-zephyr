@@ -6,6 +6,7 @@
 #define ASP_DATA_H
 
 #include "asp.h"
+#include "word.h"
 #include "bits.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -105,12 +106,6 @@ union AspDataEntry
     int32_t i;
     double d;
 };
-
-/* Word constants. */
-#define AspWordBitSize 28U
-#define AspWordMax ((1U << (AspWordBitSize)) - 1U)
-#define AspSignedWordMin (-(1 << (AspWordBitSize) - 1))
-#define AspSignedWordMax ((1 << (AspWordBitSize) - 1) - 1)
 
 /* Low-level field access. */
 #define AspDataSetWord0(eptr, value) \
