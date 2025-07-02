@@ -36,6 +36,17 @@ static AspRunResult LoadSignedOperand
 static AspRunResult LoadFloatOperand
     (AspEngine *, double *operand);
 
+#ifdef ASP_DEBUG
+typedef struct
+{
+    uint8_t code;
+    const char *name;
+} OpInfo;
+static void PrintOp
+    (AspEngine *, uint8_t opCode, const OpInfo *, size_t,
+     const char *description);
+#endif
+
 AspRunResult AspStep(AspEngine *engine)
 {
     if (engine->inApp)
@@ -527,7 +538,14 @@ static AspRunResult Step(AspEngine *engine)
         case OpCode_NOT:
         {
             #ifdef ASP_DEBUG
-            fputs("Unary op\n", engine->traceFile);
+            const static OpInfo ops[] =
+            {
+                {OpCode_LNOT, "LNOT"},
+                {OpCode_POS, "POS"},
+                {OpCode_NEG, "NEG"},
+                {OpCode_NOT, "NOT"},
+            };
+            PrintOp(engine, opCode, ops, sizeof ops / sizeof *ops, "unary");
             #endif
 
             /* Fetch the operand from the stack. */
@@ -583,7 +601,33 @@ static AspRunResult Step(AspEngine *engine)
         case OpCode_ORDER:
         {
             #ifdef ASP_DEBUG
-            fputs("Binary op\n", engine->traceFile);
+            const static OpInfo ops[] =
+            {
+                {OpCode_OR, "OR"},
+                {OpCode_XOR, "XOR"},
+                {OpCode_AND, "AND"},
+                {OpCode_LSH, "LSH"},
+                {OpCode_RSH, "RSH"},
+                {OpCode_ADD, "ADD"},
+                {OpCode_SUB, "SUB"},
+                {OpCode_MUL, "MUL"},
+                {OpCode_DIV, "DIV"},
+                {OpCode_FDIV, "FDIV"},
+                {OpCode_MOD, "MOD"},
+                {OpCode_POW, "POW"},
+                {OpCode_NE, "NE"},
+                {OpCode_EQ, "EQ"},
+                {OpCode_LT, "LT"},
+                {OpCode_LE, "LE"},
+                {OpCode_GT, "GT"},
+                {OpCode_GE, "GE"},
+                {OpCode_NIN, "NIN"},
+                {OpCode_IN, "IN"},
+                {OpCode_NIS, "NIS"},
+                {OpCode_IS, "IS"},
+                {OpCode_ORDER, "ORDER"},
+            };
+            PrintOp(engine, opCode, ops, sizeof ops / sizeof *ops, "binary");
             #endif
 
             /* Access the right value from the stack. */
@@ -2902,3 +2946,19 @@ static AspRunResult LoadFloatOperand
         engine->floatConverter(data) : *(double *)data;
     return AspRunResult_OK;
 }
+
+#ifdef ASP_DEBUG
+static void PrintOp
+    (AspEngine *engine, uint8_t opCode, const OpInfo *ops, size_t opsSize,
+     const char *description)
+{
+    unsigned i = 0;
+    for (; i < opsSize; i++)
+        if (ops[i].code == opCode)
+            break;
+    if (i < opsSize)
+        fprintf(engine->traceFile, "%s\n", ops[i].name);
+    else
+        fprintf(engine->traceFile, "Unknown %s op\n", description);
+}
+#endif
