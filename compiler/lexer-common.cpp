@@ -184,8 +184,6 @@ Token *Lexer::ProcessNumber()
             case State::IncompleteBinary:
                 if (c == '0' || c == '1')
                     state = State::Binary;
-                else if (c == '_')
-                    state = State::BinarySeparator;
                 else
                     state = State::Invalid;
                 break;
@@ -210,7 +208,7 @@ Token *Lexer::ProcessNumber()
                 break;
 
             case State::BinarySeparator:
-                if (isxdigit(c))
+                if (c == '0' || c == '1')
                     state = State::Binary;
                 else
                     state = State::Invalid;
@@ -219,8 +217,6 @@ Token *Lexer::ProcessNumber()
             case State::IncompleteHexadecimal:
                 if (isxdigit(c))
                     state = State::Hexadecimal;
-                else if (c == '_')
-                    state = State::HexadecimalSeparator;
                 else
                     state = State::Invalid;
                 break;
