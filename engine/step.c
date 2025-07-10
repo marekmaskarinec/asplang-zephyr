@@ -1391,7 +1391,10 @@ static AspRunResult Step(AspEngine *engine)
         case OpCode_CALL:
         {
             #ifdef ASP_DEBUG
-            fputs("CALL\n", engine->traceFile);
+            fputs("CALL", engine->traceFile);
+            if (engine->again)
+                fputs("; again", engine->traceFile);
+            fputc('\n', engine->traceFile);
             #endif
 
             AspDataEntry *function = 0, *arguments = 0;
