@@ -7,6 +7,23 @@ chronological order.
 Changes
 -------
 
+Version 1.2.4.2 (generator 1.2.2.1, compiler 1.2.2.2, engine 1.2.3.2):
+- Compiler:
+  - Fixed issues with lexical analysis with respect to where separators are
+    allowed in numeric literals.
+  - Fixed a bug in the lexical analysis of binary literals.
+- Engine:
+  - In debug builds, made some changes to the trace output:
+    - Replaced generic descriptions for unary and binary operation instructions
+      with specific instruction mnemonics.
+    - Added an indication on CALL instructions to indicate when they are being
+      invoked with the "again" feature, to distinguish these cases from cases
+      where an application function is calling another script-callable
+      function.
+- Build:
+  - Added build rules to force CMake to reconfigure/regenerate when version.txt
+    files are changed, forcing rebuilds to occur.
+
 Version 1.2.4.1 (generator 1.2.2.1, compiler 1.2.2.1, engine 1.2.3.1):
 - Fixed an issue that caused the build to fail under Windows due to target
   build order.
@@ -47,8 +64,6 @@ Version 1.2.3.5 (generator 1.2.1.2, compiler 1.2.1.3, engine 1.2.2.4):
     are not generated in the first place.
 
 Version 1.2.3.4 (generator 1.2.1.2, compiler 1.2.1.2, engine 1.2.2.4):
-- Engine:
-  - Fixed a benign coding error in the API function AspIteratorErase.
 - Compiler:
   - Added a warning when script executables reach a specified percentage of the
     maximum code size, the default being 80%.
@@ -56,6 +71,8 @@ Version 1.2.3.4 (generator 1.2.1.2, compiler 1.2.1.2, engine 1.2.2.4):
   - Included a missing header in the main module.
 - General:
   - Made command line option processing more robust for all commands.
+- Engine:
+  - Fixed a benign coding error in the API function AspIteratorErase.
 
 Version 1.2.3.3 (generator 1.2.1.1, compiler 1.2.1.1, engine 1.2.2.3):
 - Engine:
