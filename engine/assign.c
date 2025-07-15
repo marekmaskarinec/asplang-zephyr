@@ -6,7 +6,7 @@
 #include "stack.h"
 #include "sequence.h"
 
-static AspRunResult AspCheckSequenceMatch
+static AspRunResult CheckSequenceMatch
     (AspEngine *, const AspDataEntry *address, const AspDataEntry *newValue);
 
 AspRunResult AspAssignSimple
@@ -70,7 +70,7 @@ AspRunResult AspAssignSequence
     if (assertResult != AspRunResult_OK)
         return assertResult;
 
-    AspRunResult checkResult = AspCheckSequenceMatch
+    AspRunResult checkResult = CheckSequenceMatch
         (engine, address, newValue);
     if (checkResult != AspRunResult_OK)
         return checkResult;
@@ -102,7 +102,7 @@ AspRunResult AspAssignSequence
             if (addressElementType == DataType_Tuple ||
                 addressElementType == DataType_List)
             {
-                AspRunResult checkResult = AspCheckSequenceMatch
+                AspRunResult checkResult = CheckSequenceMatch
                     (engine, addressElement, newValueElement);
                 if (checkResult != AspRunResult_OK)
                     return checkResult;
@@ -154,7 +154,7 @@ AspRunResult AspAssignSequence
     return AspRunResult_OK;
 }
 
-static AspRunResult AspCheckSequenceMatch
+static AspRunResult CheckSequenceMatch
     (AspEngine *engine,
      const AspDataEntry *address, const AspDataEntry *value)
 {

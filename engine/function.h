@@ -18,10 +18,6 @@ AspRunResult AspExpandDictionaryGroupArgument
 AspRunResult AspCallFunction
     (AspEngine *, AspDataEntry *function, AspDataEntry *argumentList,
      bool fromApp);
-AspRunResult AspLoadArguments
-    (AspEngine *,
-     const AspDataEntry *argumentList, const AspDataEntry *parameterList,
-     AspDataEntry *ns);
 AspRunResult AspReturnToCaller(AspEngine *);
 
 #ifdef __cplusplus

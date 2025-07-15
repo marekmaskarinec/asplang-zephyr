@@ -17,6 +17,11 @@
 #include <stdio.h>
 #endif
 
+static AspRunResult LoadArguments
+    (AspEngine *,
+     const AspDataEntry *argumentList, const AspDataEntry *parameterList,
+     AspDataEntry *ns);
+
 AspRunResult AspExpandIterableGroupArgument
     (AspEngine *engine, AspDataEntry *argumentList,
      const AspDataEntry *iterable)
@@ -303,7 +308,7 @@ AspRunResult AspCallFunction
         ns = AspAllocEntry(engine, DataType_Namespace);
         if (ns == 0)
             return AspRunResult_OutOfDataMemory;
-        AspRunResult loadArgumentsResult = AspLoadArguments
+        AspRunResult loadArgumentsResult = LoadArguments
             (engine, argumentList, parameters, ns);
         if (loadArgumentsResult != AspRunResult_OK)
             return loadArgumentsResult;
@@ -470,7 +475,7 @@ AspRunResult AspCallFunction
 }
 
 /* Builds a namespace based on arguments and parameters. */
-AspRunResult AspLoadArguments
+static AspRunResult LoadArguments
     (AspEngine *engine,
      const AspDataEntry *argumentList, const AspDataEntry *parameterList,
      AspDataEntry *ns)

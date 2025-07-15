@@ -6,20 +6,20 @@
 #include "asp-priv.h"
 #include "data.h"
 
-static AspDataEntry *AspPush1(AspEngine *, AspDataEntry *, bool use);
-static bool AspPop1(AspEngine *, bool eraseValue);
+static AspDataEntry *Push(AspEngine *, AspDataEntry *, bool use);
+static bool Pop(AspEngine *, bool eraseValue);
 
 AspDataEntry *AspPush(AspEngine *engine, AspDataEntry *value)
 {
-    return AspPush1(engine, value, true);
+    return Push(engine, value, true);
 }
 
 AspDataEntry *AspPushNoUse(AspEngine *engine, const AspDataEntry *value)
 {
-    return AspPush1(engine, (AspDataEntry *)value, false);
+    return Push(engine, (AspDataEntry *)value, false);
 }
 
-static AspDataEntry *AspPush1(AspEngine *engine, AspDataEntry *value, bool use)
+static AspDataEntry *Push(AspEngine *engine, AspDataEntry *value, bool use)
 {
     AspAssert(engine, value != 0);
     AspRunResult assertResult = AspAssert
@@ -83,15 +83,15 @@ AspDataEntry *AspTopValue2(AspEngine *engine)
 
 bool AspPop(AspEngine *engine)
 {
-    return AspPop1(engine, true);
+    return Pop(engine, true);
 }
 
 bool AspPopNoErase(AspEngine *engine)
 {
-    return AspPop1(engine, false);
+    return Pop(engine, false);
 }
 
-static bool AspPop1(AspEngine *engine, bool eraseValue)
+static bool Pop(AspEngine *engine, bool eraseValue)
 {
     if (engine->stackTop == 0)
         return false;
