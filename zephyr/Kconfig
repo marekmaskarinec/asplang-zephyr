@@ -1,0 +1,4 @@
+
+config ASPLANG_LIB
+	bool "asp lang library"
+
